@@ -27,10 +27,10 @@ async def main():
             @commands.is_owner()
             async def reload_cog(ctx, cog: str):
                 try:
+                    await ctx.message.delete()
                     await bot.reload_extension(f"cogs.{cog}")
-                    await ctx.send(f"✅ 已重载：{cog}")
                 except Exception as e:
-                    await ctx.send(f"❌ 重载失败：{e}")
+                    await ctx.author.send(f"❌ Reload failed: {e}")
 
             await bot.load_extension("cogs.roles")
             await bot.start(TOKEN)
