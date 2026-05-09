@@ -74,8 +74,7 @@ class RolesCog(commands.Cog):
         self.bot = bot
         bot.add_view(RoleView())
 
-    @commands.Cog.listener()
-    async def on_ready(self):
+    async def _post_role_embeds(self):
         for guild in self.bot.guilds:
             channel = discord.utils.get(guild.text_channels, name=ROLES_CHANNEL_NAME)
             if not channel:
@@ -98,6 +97,14 @@ class RolesCog(commands.Cog):
                     await channel.send(embed=embed, view=RoleView())
                 except Exception:
                     pass
+
+    async def cog_load(self):
+        if self.bot.is_ready():
+            await self._post_role_embeds()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        await self._post_role_embeds()
 
 
 async def setup(bot: commands.Bot):
