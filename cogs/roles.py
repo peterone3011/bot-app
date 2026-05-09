@@ -14,7 +14,7 @@ async def handle_role(interaction: discord.Interaction, selected: str):
 
     role = discord.utils.get(guild.roles, name=selected)
     if not role:
-        await interaction.edit_original_response(content="⚠️ No role found for this site.")
+        await interaction.followup.send(content="⚠️ No role found for this site.", ephemeral=True)
         return
 
     for site in SITES:
@@ -26,10 +26,10 @@ async def handle_role(interaction: discord.Interaction, selected: str):
 
     if role in member.roles:
         await member.remove_roles(role)
-        await interaction.edit_original_response(content=f"✅ Role removed: **{selected}**")
+        await interaction.followup.send(content=f"✅ Role removed: **{selected}**", ephemeral=True)
     else:
         await member.add_roles(role)
-        await interaction.edit_original_response(content=f"✅ Role assigned: **{selected}**. Welcome!")
+        await interaction.followup.send(content=f"✅ Role assigned: **{selected}**. Welcome!", ephemeral=True)
 
 
 class Site1Select(discord.ui.Select):
