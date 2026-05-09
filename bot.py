@@ -28,6 +28,9 @@ async def main():
             async def reload_cog(ctx, cog: str):
                 try:
                     await ctx.message.delete()
+                except discord.Forbidden:
+                    pass
+                try:
                     await bot.reload_extension(f"cogs.{cog}")
                 except Exception as e:
                     await ctx.author.send(f"❌ Reload failed: {e}")
