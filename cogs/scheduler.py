@@ -3,6 +3,10 @@ import os
 import uuid
 from datetime import datetime, timezone, timedelta
 
+import discord
+from discord.ext import commands, tasks
+from discord import app_commands
+
 TZ_CST = timezone(timedelta(hours=8))
 DATA_FILE = "scheduled_messages.json"
 
@@ -35,11 +39,6 @@ def is_due(message: dict) -> bool:
         return False
 
 
-import discord
-from discord.ext import commands, tasks
-from discord import app_commands
-
-
 class SchedulerCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -58,9 +57,9 @@ class SchedulerCog(commands.Cog):
             if not is_due(msg):
                 remaining.append(msg)
                 continue
-            channel = self.bot.get_channel(msg["channel_id"])
+            channel = self.bot.get_channel(msg.get("channel_id"))
             if channel is None:
-                print(f"[scheduler] channel {msg['channel_id']} not found, dropping {msg['id']}")
+                print(f"[scheduler] channel {msg.get('channel_id')} not found, dropping {msg.get('id', '<unknown>')}")
                 continue
             text = msg["content"]
             if msg.get("image_url"):
@@ -68,7 +67,7 @@ class SchedulerCog(commands.Cog):
             try:
                 await channel.send(text)
             except Exception as e:
-                print(f"[scheduler] failed to send {msg['id']}: {e}")
+                print(f"[scheduler] failed to send {msg.get('id', '<unknown>')}: {e}")
                 remaining.append(msg)
         if len(remaining) != len(messages):
             save_messages(remaining)
