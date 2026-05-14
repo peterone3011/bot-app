@@ -50,11 +50,6 @@ class ScheduleModal(discord.ui.Modal, title="Schedule a Message"):
         style=discord.TextStyle.paragraph,
         max_length=2000,
     )
-    image_url = discord.ui.TextInput(
-        label="Image URL (optional)",
-        required=False,
-        max_length=500,
-    )
 
     def __init__(self, channel_id: int):
         super().__init__()
@@ -69,13 +64,11 @@ class ScheduleModal(discord.ui.Modal, title="Schedule a Message"):
             )
             return
 
-        url = self.image_url.value.strip() or None
         msg = {
             "id": str(uuid.uuid4()),
             "channel_id": self.channel_id,
             "send_at": dt.isoformat(),
             "content": self.content.value,
-            "image_url": url,
         }
         messages = load_messages()
         messages.append(msg)
@@ -87,8 +80,6 @@ class ScheduleModal(discord.ui.Modal, title="Schedule a Message"):
             f"✅ Scheduled for **{dt.strftime('%Y-%m-%d %H:%M')}** (Beijing Time) in {ch_mention}\n\n"
             f"**Preview:**\n{self.content.value}"
         )
-        if url:
-            preview += f"\n{url}"
         await interaction.response.send_message(preview, ephemeral=True)
 
 
@@ -145,10 +136,7 @@ class PreviewButton(discord.ui.Button):
         if msg is None:
             await interaction.response.send_message("❌ Not found.", ephemeral=True)
             return
-        text = msg["content"]
-        if msg.get("image_url"):
-            text += f"\n{msg['image_url']}"
-        await interaction.response.send_message(f"**Preview:**\n{text}", ephemeral=True)
+        await interaction.response.send_message(f"**Preview:**\n{msg['content']}", ephemeral=True)
 
 
 class EditButton(discord.ui.Button):
@@ -236,11 +224,6 @@ class EditModal(discord.ui.Modal, title="Edit Scheduled Message"):
         required=False,
         max_length=2000,
     )
-    image_url = discord.ui.TextInput(
-        label="New Image URL  (blank=keep, 'remove'=clear)",
-        required=False,
-        max_length=500,
-    )
 
     def __init__(self, msg_id: str, list_view: "ScheduleListView"):
         super().__init__()
@@ -266,15 +249,7 @@ class EditModal(discord.ui.Modal, title="Edit Scheduled Message"):
         if self.content.value.strip():
             msg["content"] = self.content.value
 
-        url_input = self.image_url.value.strip()
-        if url_input.lower() == "remove":
-            msg["image_url"] = None
-        elif url_input:
-            msg["image_url"] = url_input
-
         save_messages(messages)
-        # Modal interactions cannot edit the original list message directly.
-        # Confirm success; user can re-open /schedule_list to see changes.
         await interaction.response.send_message("✅ Updated.", ephemeral=True)
 
 
@@ -297,7 +272,6 @@ class ChangeChannelSelectView(discord.ui.View):
             return
         msg["channel_id"] = select.values[0].id
         save_messages(messages)
-        # Edit the channel-select ephemeral message to confirm and close the select UI.
         await interaction.response.edit_message(content="✅ Channel updated. Re-open `/schedule_list` to see changes.", view=None)
 
 
@@ -365,11 +339,8 @@ class SchedulerCog(commands.Cog):
             if channel is None:
                 print(f"[scheduler] channel {msg.get('channel_id')} not found, dropping {msg.get('id', '<unknown>')}")
                 continue
-            text = msg["content"]
-            if msg.get("image_url"):
-                text += f"\n{msg['image_url']}"
             try:
-                await channel.send(text)
+                await channel.send(msg["content"])
             except Exception as e:
                 print(f"[scheduler] failed to send {msg.get('id', '<unknown>')}: {e}")
                 remaining.append(msg)
