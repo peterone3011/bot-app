@@ -110,6 +110,7 @@ class SchedulerCog(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="schedule", description="Schedule a message to a channel")
+    @app_commands.guild_only()
     async def schedule(self, interaction: discord.Interaction):
         await interaction.response.send_message(
             "Select the channel to post in:", view=ChannelSelectView(), ephemeral=True
@@ -124,6 +125,8 @@ class SchedulerCog(commands.Cog):
     @tasks.loop(seconds=60)
     async def send_loop(self):
         messages = load_messages()
+        if not messages:
+            return
         remaining = []
         for msg in messages:
             if not is_due(msg):
