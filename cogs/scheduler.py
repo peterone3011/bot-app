@@ -28,5 +28,55 @@ def save_messages(messages: list[dict]) -> None:
 
 
 def is_due(message: dict) -> bool:
-    send_at = datetime.fromisoformat(message["send_at"])
-    return datetime.now(tz=TZ_CST) >= send_at
+    try:
+        send_at = datetime.fromisoformat(message["send_at"])
+        return datetime.now(tz=TZ_CST) >= send_at
+    except (KeyError, ValueError):
+        return False
+
+
+import discord
+from discord.ext import commands, tasks
+from discord import app_commands
+
+
+class SchedulerCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+
+    def cog_unload(self):
+        self.send_loop.cancel()
+
+    async def cog_load(self):
+        self.send_loop.start()
+
+    @tasks.loop(seconds=60)
+    async def send_loop(self):
+        messages = load_messages()
+        remaining = []
+        for msg in messages:
+            if not is_due(msg):
+                remaining.append(msg)
+                continue
+            channel = self.bot.get_channel(msg["channel_id"])
+            if channel is None:
+                print(f"[scheduler] channel {msg['channel_id']} not found, dropping {msg['id']}")
+                continue
+            text = msg["content"]
+            if msg.get("image_url"):
+                text += f"\n{msg['image_url']}"
+            try:
+                await channel.send(text)
+            except Exception as e:
+                print(f"[scheduler] failed to send {msg['id']}: {e}")
+                remaining.append(msg)
+        if len(remaining) != len(messages):
+            save_messages(remaining)
+
+    @send_loop.before_loop
+    async def before_send_loop(self):
+        await self.bot.wait_until_ready()
+
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(SchedulerCog(bot))
