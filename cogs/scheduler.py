@@ -223,6 +223,84 @@ class NextPageButton(discord.ui.Button):
         )
 
 
+class EditModal(discord.ui.Modal, title="Edit Scheduled Message"):
+    send_time = discord.ui.TextInput(
+        label="New Send Time (blank = keep current)",
+        placeholder="YYYY-MM-DD HH:MM",
+        required=False,
+        max_length=16,
+    )
+    content = discord.ui.TextInput(
+        label="New Content (blank = keep current)",
+        style=discord.TextStyle.paragraph,
+        required=False,
+        max_length=2000,
+    )
+    image_url = discord.ui.TextInput(
+        label="New Image URL  (blank=keep, 'remove'=clear)",
+        required=False,
+        max_length=500,
+    )
+
+    def __init__(self, msg_id: str, list_view: "ScheduleListView"):
+        super().__init__()
+        self.msg_id = msg_id
+        self.list_view = list_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        messages = load_messages()
+        msg = next((m for m in messages if m["id"] == self.msg_id), None)
+        if msg is None:
+            await interaction.response.send_message("❌ Message not found.", ephemeral=True)
+            return
+
+        if self.send_time.value.strip():
+            dt = parse_time(self.send_time.value)
+            if dt is None:
+                await interaction.response.send_message(
+                    "❌ Invalid time format. Use `YYYY-MM-DD HH:MM`", ephemeral=True
+                )
+                return
+            msg["send_at"] = dt.isoformat()
+
+        if self.content.value.strip():
+            msg["content"] = self.content.value
+
+        url_input = self.image_url.value.strip()
+        if url_input.lower() == "remove":
+            msg["image_url"] = None
+        elif url_input:
+            msg["image_url"] = url_input
+
+        save_messages(messages)
+        # Modal interactions cannot edit the original list message directly.
+        # Confirm success; user can re-open /schedule_list to see changes.
+        await interaction.response.send_message("✅ Updated.", ephemeral=True)
+
+
+class ChangeChannelSelectView(discord.ui.View):
+    def __init__(self, msg_id: str, list_view: "ScheduleListView"):
+        super().__init__(timeout=120)
+        self.msg_id = msg_id
+        self.list_view = list_view
+
+    @discord.ui.select(
+        cls=discord.ui.ChannelSelect,
+        placeholder="Select new channel...",
+        channel_types=[discord.ChannelType.text],
+    )
+    async def channel_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        messages = load_messages()
+        msg = next((m for m in messages if m["id"] == self.msg_id), None)
+        if msg is None:
+            await interaction.response.send_message("❌ Message not found.", ephemeral=True)
+            return
+        msg["channel_id"] = select.values[0].id
+        save_messages(messages)
+        # Edit the channel-select ephemeral message to confirm and close the select UI.
+        await interaction.response.edit_message(content="✅ Channel updated. Re-open `/schedule_list` to see changes.", view=None)
+
+
 class ScheduleListView(discord.ui.View):
     def __init__(self, messages: list[dict], guild: discord.Guild, page: int = 0):
         super().__init__(timeout=300)
