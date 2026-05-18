@@ -576,3 +576,64 @@ class MessageListView(discord.ui.View):
             content="Select the channel to post in:",
             view=NewMessageView(),
         )
+
+
+# ---------------------------------------------------------------------------
+# Cog
+# ---------------------------------------------------------------------------
+
+class EmbedBuilderCog(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        self.send_loop.start()
+
+    def cog_unload(self):
+        self.send_loop.cancel()
+
+    @tasks.loop(seconds=60)
+    async def send_loop(self):
+        now = datetime.now(CST)
+        for msg in list(load_messages()):
+            if msg["status"] != "scheduled":
+                continue
+            if datetime.fromisoformat(msg["send_at"]) > now:
+                continue
+            channel = self.bot.get_channel(msg["channel_id"])
+            if channel is None:
+                print(f"[embed_builder] Channel {msg['channel_id']} not found, removing {msg['id']}")
+                delete_message(msg["id"])
+                continue
+            try:
+                await channel.send(embed=build_embed(msg), view=build_view(msg))
+            except Exception as e:
+                print(f"[embed_builder] Failed to send {msg['id']}: {e}")
+            finally:
+                delete_message(msg["id"])
+
+    @send_loop.before_loop
+    async def before_send_loop(self):
+        await self.bot.wait_until_ready()
+
+    @app_commands.command(name="embed", description="Build and send a rich embed message")
+    @app_commands.guild_only()
+    async def embed_cmd(self, interaction: discord.Interaction):
+        messages = sorted(
+            load_messages(),
+            key=lambda m: (m["status"] != "scheduled", m.get("send_at") or m.get("created_at", "")),
+        )
+        if messages:
+            await interaction.response.send_message(
+                content="Select a message to edit, or create a new one:",
+                view=MessageListView(messages, self.bot),
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                content="Select the channel to post in:",
+                view=NewMessageView(),
+                ephemeral=True,
+            )
+
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(EmbedBuilderCog(bot))
