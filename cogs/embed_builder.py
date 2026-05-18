@@ -659,14 +659,15 @@ class NewMessageView(discord.ui.View):
 class MessageSelect(discord.ui.Select):
     def __init__(self, messages: list[dict[str, Any]], bot: commands.Bot):
         emoji_map = {"scheduled": "▶️", "published": "✅", "draft": "🔴"}
-        options = [
-            discord.SelectOption(
+        options = []
+        for msg in messages[:25]:
+            send_time = msg["send_at"][:16].replace("T", " ") + " (UTC+8)" if msg.get("send_at") else None
+            options.append(discord.SelectOption(
                 label=display_label(msg, bot)[:100],
                 value=msg["id"],
                 emoji=emoji_map.get(msg["status"], "🔴"),
-            )
-            for msg in messages[:25]
-        ]
+                description=send_time,
+            ))
         super().__init__(placeholder="Select a message...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
