@@ -150,7 +150,7 @@ def _field_summary(msg: dict[str, Any]) -> str:
     color_str = f"#{color_val:06X}" if color_val is not None else "(none)"
     desc = msg["description"] or ""
     desc_preview = (desc[:50] + "…") if len(desc) > 50 else (desc or "(none)")
-    btn = f"{msg['button_label']} | {msg['button_url']}" if msg["button_label"] else "(none)"
+    btn = f"{msg['button_label']} | {msg['button_url']}" if (msg["button_label"] and msg["button_url"]) else "(none)"
     return "\n".join([
         f"Title:       {msg['title'] or '(none)'}",
         f"Description: {desc_preview}",

@@ -172,6 +172,15 @@ def test_build_view_partial_button():
     assert eb.build_view(_full_msg(button_url=None)) is None
 
 
+def test_field_summary_partial_button_shows_none():
+    msg = eb.new_draft(1)
+    msg["button_label"] = "Click"
+    msg["button_url"] = None
+    summary = eb._field_summary(msg)
+    assert "Click | None" not in summary
+    assert "Button:      (none)" in summary
+
+
 # ---------------------------------------------------------------------------
 # display_label
 # ---------------------------------------------------------------------------
