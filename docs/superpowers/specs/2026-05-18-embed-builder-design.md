@@ -15,6 +15,7 @@ Allow server admins to build and send rich Discord embeds (with title, descripti
 - Edit or cancel scheduled messages via the same builder interface
 - All message state persists across bot restarts
 - Error message if bot lacks permission in selected channel
+- Edit already-published embeds via right-click context menu ("Edit Embed") or `/edit-embed <message_link>` command
 
 ## Architecture
 
@@ -141,6 +142,26 @@ Clicking **Send** updates the message based on current status:
 
 **Cancel Schedule:** Reverts `status` to `"draft"` and clears `send_at`. Confirms with ephemeral message. Entry remains editable.
 
+## Editing Published Embeds
+
+Two entry points reconstruct a draft from an existing bot message, then open the same builder interface.
+
+### Entry point A — Context menu
+
+User right-clicks any bot message → **Apps → Edit Embed**. Bot validates the message was sent by itself and contains an embed, then reconstructs a temporary draft from the embed fields and any link button component. Opens the builder pre-filled.
+
+### Entry point B — Slash command
+
+`/edit-embed message_link:<url>` — user pastes the Discord message link (format `https://discord.com/channels/GUILD/CHANNEL/MESSAGE`). Bot parses channel and message IDs, fetches the message, performs the same validation and reconstruction.
+
+### Edit-mode builder differences
+
+When a draft carries a `message_id`, the **Send** step shows only one button: **[Save Changes]** (replaces Send Now / Schedule). Clicking it edits the original message in-place. On success, the draft is removed from `messages.json`.
+
+### Draft reconstruction
+
+All embed fields are read from `discord.Message.embeds[0]`. The link button (if any) is read from `discord.Message.components`. The reconstructed draft is saved to `messages.json` as a regular draft entry with an additional `message_id` field.
+
 ## Embed Rendering
 
 ```python
@@ -175,6 +196,10 @@ if entry["button_label"] and entry["button_url"]:
 | Image URL unreachable | Message sends; Discord shows broken image (acceptable) |
 | `messages.json` missing on startup | Create empty file and continue |
 | More than 25 messages in list | Show first 25 (sorted: scheduled first by send_at, then drafts by creation time) |
+| Edit target message not found (deleted) | Ephemeral error: "Original message not found" |
+| Invalid message link format | Ephemeral error; command aborted |
+| Message not sent by this bot | Ephemeral error: "That message was not sent by this bot" |
+| Message has no embed | Ephemeral error: "That message has no embed" |
 
 ## Hot-Reload Compatibility
 

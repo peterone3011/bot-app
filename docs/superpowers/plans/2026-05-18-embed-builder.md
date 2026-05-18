@@ -1099,3 +1099,318 @@ Railway will detect the push and automatically redeploy. The bot will be briefly
 8. Click **Send** → click **Schedule** → enter a time 2 minutes from now → confirm schedule confirmation message
 9. Wait for the scheduled time → confirm the embed appears in the target channel
 10. Run `/embed` again → confirm the draft/scheduled message appears in the list dropdown
+
+---
+
+## Task 9: Edit published embeds (context menu + /edit-embed)
+
+**Files:**
+- Modify: `cogs/embed_builder.py` (add utilities, button, update SendView, add commands)
+- Modify: `tests/test_embed_builder.py` (add tests for new utilities)
+
+- [ ] **Step 1: Write failing tests**
+
+Append to `tests/test_embed_builder.py`:
+
+```python
+# ---------------------------------------------------------------------------
+# parse_message_link
+# ---------------------------------------------------------------------------
+
+def test_parse_message_link_valid():
+    link = "https://discord.com/channels/111/222333/444555"
+    assert eb.parse_message_link(link) == (222333, 444555)
+
+
+def test_parse_message_link_ptb():
+    link = "https://ptb.discord.com/channels/111/222333/444555"
+    assert eb.parse_message_link(link) == (222333, 444555)
+
+
+def test_parse_message_link_invalid():
+    assert eb.parse_message_link("not a link") is None
+    assert eb.parse_message_link("https://discord.com/channels/111") is None
+
+
+# ---------------------------------------------------------------------------
+# draft_from_message
+# ---------------------------------------------------------------------------
+
+class _FakeEmbed:
+    title = "Test Title"
+    description = "Body text"
+    color = type("C", (), {"value": 0xFF0000})()
+    footer = type("F", (), {"text": "Footer"})()
+    image = type("I", (), {"url": "https://example.com/img.png"})()
+
+
+class _FakeButton:
+    url = "https://example.com"
+    label = "Click me"
+
+
+class _FakeRow:
+    children = [_FakeButton()]
+
+
+class _FakeChannel2:
+    id = 999
+
+
+class _FakeMessage:
+    id = 12345
+    embeds = [_FakeEmbed()]
+    components = [_FakeRow()]
+    channel = _FakeChannel2()
+
+
+def test_draft_from_message_fields(tmp_path, monkeypatch):
+    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
+    draft = eb.draft_from_message(_FakeMessage())
+    assert draft["title"] == "Test Title"
+    assert draft["description"] == "Body text"
+    assert draft["footer"] == "Footer"
+    assert draft["image_url"] == "https://example.com/img.png"
+    assert draft["color"] == 0xFF0000
+    assert draft["button_label"] == "Click me"
+    assert draft["button_url"] == "https://example.com"
+    assert draft["message_id"] == 12345
+    assert draft["channel_id"] == 999
+
+
+def test_draft_from_message_no_button(tmp_path, monkeypatch):
+    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
+
+    class _NoButtonRow:
+        children = []
+
+    class _MsgNoBtn:
+        id = 1
+        embeds = [_FakeEmbed()]
+        components = [_NoButtonRow()]
+        channel = _FakeChannel2()
+
+    draft = eb.draft_from_message(_MsgNoBtn())
+    assert draft["button_label"] is None
+    assert draft["button_url"] is None
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```
+pytest tests/test_embed_builder.py -v -k "parse_message or draft_from"
+```
+
+Expected: FAILs — functions not yet defined.
+
+- [ ] **Step 3: Add `parse_message_link` and `draft_from_message` to `cogs/embed_builder.py`**
+
+Add after the `_field_summary` / formatter functions (before the Modals section):
+
+```python
+import re
+
+def parse_message_link(link: str) -> tuple[int, int] | None:
+    """Returns (channel_id, message_id) from a Discord message URL, or None."""
+    match = re.search(r"channels/\d+/(\d+)/(\d+)", link)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def draft_from_message(message: discord.Message) -> dict[str, Any]:
+    embed = message.embeds[0] if message.embeds else None
+    button_label = None
+    button_url = None
+    for row in message.components:
+        for component in row.children:
+            if getattr(component, "url", None):
+                button_label = component.label
+                button_url = component.url
+                break
+
+    draft = new_draft(message.channel.id)
+    if embed:
+        draft["title"] = embed.title or None
+        draft["description"] = embed.description or None
+        draft["footer"] = embed.footer.text if embed.footer else None
+        draft["image_url"] = embed.image.url if embed.image else None
+        draft["color"] = embed.color.value if embed.color else None
+    draft["button_label"] = button_label
+    draft["button_url"] = button_url
+    draft["message_id"] = message.id
+    return draft
+```
+
+Also add `"message_id": None` to `new_draft()` so all drafts carry the field:
+
+```python
+def new_draft(channel_id: int, label: str | None = None) -> dict[str, Any]:
+    return {
+        "id": str(uuid.uuid4()),
+        "status": "draft",
+        "label": label,
+        "created_at": datetime.now(CST).isoformat(),
+        "channel_id": channel_id,
+        "send_at": None,
+        "message_id": None,        # ← new field
+        "title": None,
+        "description": None,
+        "footer": None,
+        "image_url": None,
+        "button_label": None,
+        "button_url": None,
+        "color": None,
+    }
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+```
+pytest tests/test_embed_builder.py -v
+```
+
+Expected: all PASS.
+
+- [ ] **Step 5: Add `SaveChangesButton` to `cogs/embed_builder.py`**
+
+Append after `BackToBuilderButton`:
+
+```python
+class SaveChangesButton(discord.ui.Button):
+    def __init__(self, msg_id: str):
+        super().__init__(label="Save Changes", style=discord.ButtonStyle.success)
+        self.msg_id = msg_id
+
+    async def callback(self, interaction: discord.Interaction):
+        draft = get_message(self.msg_id)
+        channel = interaction.guild.get_channel(draft["channel_id"])
+        if channel is None:
+            await interaction.response.send_message("❌ Channel not found.", ephemeral=True)
+            return
+        try:
+            original = await channel.fetch_message(draft["message_id"])
+            await original.edit(embed=build_embed(draft), view=build_view(draft))
+            delete_message(self.msg_id)
+            await interaction.response.edit_message(
+                content=f"✅ Embed updated in {channel.mention}.", view=None
+            )
+        except discord.NotFound:
+            await interaction.response.send_message(
+                "❌ Original message not found (may have been deleted).", ephemeral=True
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "❌ Bot lacks permission to edit that message.", ephemeral=True
+            )
+```
+
+- [ ] **Step 6: Update `SendView` to show Save Changes when editing**
+
+Replace the existing `SendView` class with:
+
+```python
+class SendView(discord.ui.View):
+    def __init__(self, msg_id: str):
+        super().__init__(timeout=600)
+        msg = get_message(msg_id)
+        is_edit = bool(msg and msg.get("message_id"))
+        is_scheduled = msg and msg["status"] == "scheduled"
+
+        if is_edit:
+            self.add_item(SaveChangesButton(msg_id))
+        else:
+            self.add_item(SendNowButton(msg_id))
+            if is_scheduled:
+                self.add_item(ScheduleButton(msg_id, label="Update Schedule"))
+                self.add_item(CancelScheduleButton(msg_id))
+            else:
+                self.add_item(ScheduleButton(msg_id))
+        self.add_item(BackToBuilderButton(msg_id))
+```
+
+- [ ] **Step 7: Add context menu command and `/edit-embed` to `EmbedBuilderCog`**
+
+Add inside the `EmbedBuilderCog` class, after `embed_cmd`:
+
+```python
+    @app_commands.context_menu(name="Edit Embed")
+    @app_commands.guild_only()
+    async def edit_embed_menu(self, interaction: discord.Interaction, message: discord.Message):
+        if message.author != self.bot.user:
+            await interaction.response.send_message(
+                "❌ That message was not sent by this bot.", ephemeral=True
+            )
+            return
+        if not message.embeds:
+            await interaction.response.send_message(
+                "❌ That message has no embed.", ephemeral=True
+            )
+            return
+        draft = draft_from_message(message)
+        upsert_message(draft)
+        await interaction.response.send_message(
+            content=format_builder_content(draft),
+            view=BuilderMainView(draft["id"]),
+            ephemeral=True,
+        )
+
+    @app_commands.command(name="edit-embed", description="Edit a published embed by message link")
+    @app_commands.guild_only()
+    async def edit_embed_cmd(self, interaction: discord.Interaction, message_link: str):
+        result = parse_message_link(message_link)
+        if result is None:
+            await interaction.response.send_message("❌ Invalid message link.", ephemeral=True)
+            return
+        channel_id, message_id = result
+        channel = interaction.guild.get_channel(channel_id)
+        if channel is None:
+            await interaction.response.send_message("❌ Channel not found.", ephemeral=True)
+            return
+        try:
+            message = await channel.fetch_message(message_id)
+        except discord.NotFound:
+            await interaction.response.send_message("❌ Message not found.", ephemeral=True)
+            return
+        if message.author != self.bot.user:
+            await interaction.response.send_message(
+                "❌ That message was not sent by this bot.", ephemeral=True
+            )
+            return
+        if not message.embeds:
+            await interaction.response.send_message(
+                "❌ That message has no embed.", ephemeral=True
+            )
+            return
+        draft = draft_from_message(message)
+        upsert_message(draft)
+        await interaction.response.send_message(
+            content=format_builder_content(draft),
+            view=BuilderMainView(draft["id"]),
+            ephemeral=True,
+        )
+```
+
+Also register the context menu command in `setup()`:
+
+```python
+async def setup(bot: commands.Bot):
+    cog = EmbedBuilderCog(bot)
+    await bot.add_cog(cog)
+    bot.tree.add_command(cog.edit_embed_menu)
+```
+
+- [ ] **Step 8: Run all tests**
+
+```
+pytest tests/ -v
+```
+
+Expected: all PASS.
+
+- [ ] **Step 9: Commit**
+
+```
+git add cogs/embed_builder.py tests/test_embed_builder.py
+git commit -m "feat: add edit-embed context menu and /edit-embed command"
+```
