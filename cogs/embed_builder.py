@@ -528,3 +528,51 @@ class SendView(discord.ui.View):
         else:
             self.add_item(ScheduleButton(msg_id))
         self.add_item(BackToBuilderButton(msg_id))
+
+
+class NewMessageChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self):
+        super().__init__(
+            placeholder="Select target channel...",
+            channel_types=[discord.ChannelType.text],
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        channel = self.values[0]
+        await interaction.response.send_modal(NewMessageModal(channel.id))
+
+
+class NewMessageView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=300)
+        self.add_item(NewMessageChannelSelect())
+
+
+class MessageSelect(discord.ui.Select):
+    def __init__(self, messages: list[dict[str, Any]], bot: commands.Bot):
+        options = []
+        for msg in messages[:25]:
+            label = display_label(msg, bot)[:100]
+            emoji = "📅" if msg["status"] == "scheduled" else "📝"
+            options.append(discord.SelectOption(label=label, value=msg["id"], emoji=emoji))
+        super().__init__(placeholder="Select a message to edit...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        msg = get_message(self.values[0])
+        await interaction.response.edit_message(
+            content=format_builder_content(msg),
+            view=BuilderMainView(self.values[0]),
+        )
+
+
+class MessageListView(discord.ui.View):
+    def __init__(self, messages: list[dict[str, Any]], bot: commands.Bot):
+        super().__init__(timeout=300)
+        self.add_item(MessageSelect(messages, bot))
+
+    @discord.ui.button(label="+ New Message", style=discord.ButtonStyle.primary, row=1)
+    async def new_message(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(
+            content="Select the channel to post in:",
+            view=NewMessageView(),
+        )
