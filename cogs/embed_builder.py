@@ -172,3 +172,204 @@ def format_builder_content(msg: dict[str, Any]) -> str:
 
 def format_edit_fields_content(msg: dict[str, Any]) -> str:
     return f"**Edit Fields** — click a field to update it\n\n```\n{_field_summary(msg)}\n```"
+
+
+# ---------------------------------------------------------------------------
+# Modals
+# ---------------------------------------------------------------------------
+
+class TitleModal(discord.ui.Modal, title="Update Title"):
+    value_input = discord.ui.TextInput(
+        label="Title",
+        max_length=256,
+        required=False,
+        placeholder="Leave blank to clear",
+    )
+
+    def __init__(self, msg_id: str):
+        super().__init__()
+        self.msg_id = msg_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        msg = get_message(self.msg_id)
+        msg["title"] = self.value_input.value.strip() or None
+        upsert_message(msg)
+        await interaction.response.edit_message(
+            content=format_edit_fields_content(msg),
+            view=EditFieldsView(self.msg_id),
+        )
+
+
+class DescriptionModal(discord.ui.Modal, title="Update Description"):
+    value_input = discord.ui.TextInput(
+        label="Description",
+        style=discord.TextStyle.paragraph,
+        max_length=4000,
+        required=False,
+        placeholder="Leave blank to clear",
+    )
+
+    def __init__(self, msg_id: str):
+        super().__init__()
+        self.msg_id = msg_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        msg = get_message(self.msg_id)
+        msg["description"] = self.value_input.value.strip() or None
+        upsert_message(msg)
+        await interaction.response.edit_message(
+            content=format_edit_fields_content(msg),
+            view=EditFieldsView(self.msg_id),
+        )
+
+
+class FooterModal(discord.ui.Modal, title="Update Footer"):
+    value_input = discord.ui.TextInput(
+        label="Footer",
+        max_length=2048,
+        required=False,
+        placeholder="Leave blank to clear",
+    )
+
+    def __init__(self, msg_id: str):
+        super().__init__()
+        self.msg_id = msg_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        msg = get_message(self.msg_id)
+        msg["footer"] = self.value_input.value.strip() or None
+        upsert_message(msg)
+        await interaction.response.edit_message(
+            content=format_edit_fields_content(msg),
+            view=EditFieldsView(self.msg_id),
+        )
+
+
+class ImageModal(discord.ui.Modal, title="Update Image URL"):
+    value_input = discord.ui.TextInput(
+        label="Image URL",
+        required=False,
+        placeholder="Leave blank to clear",
+    )
+
+    def __init__(self, msg_id: str):
+        super().__init__()
+        self.msg_id = msg_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        msg = get_message(self.msg_id)
+        msg["image_url"] = self.value_input.value.strip() or None
+        upsert_message(msg)
+        await interaction.response.edit_message(
+            content=format_edit_fields_content(msg),
+            view=EditFieldsView(self.msg_id),
+        )
+
+
+class LinkButtonModal(discord.ui.Modal, title="Update Link Button"):
+    label_input = discord.ui.TextInput(
+        label="Button Label",
+        max_length=80,
+        required=False,
+        placeholder="Leave blank to remove button",
+    )
+    url_input = discord.ui.TextInput(
+        label="Button URL",
+        required=False,
+        placeholder="https://...",
+    )
+
+    def __init__(self, msg_id: str):
+        super().__init__()
+        self.msg_id = msg_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        msg = get_message(self.msg_id)
+        msg["button_label"] = self.label_input.value.strip() or None
+        msg["button_url"] = self.url_input.value.strip() or None
+        upsert_message(msg)
+        await interaction.response.edit_message(
+            content=format_edit_fields_content(msg),
+            view=EditFieldsView(self.msg_id),
+        )
+
+
+class ColorModal(discord.ui.Modal, title="Update Color"):
+    value_input = discord.ui.TextInput(
+        label="Hex Color (e.g. 9B59B6)",
+        max_length=7,
+        required=False,
+        placeholder="Leave blank to clear",
+    )
+
+    def __init__(self, msg_id: str):
+        super().__init__()
+        self.msg_id = msg_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        result = parse_color(self.value_input.value)
+        if result == -1:
+            await interaction.response.send_message(
+                content="❌ Invalid hex color. Use 6 hex digits, e.g. `9B59B6` or `#FF0000`.",
+                ephemeral=True,
+            )
+            return
+        msg = get_message(self.msg_id)
+        msg["color"] = result
+        upsert_message(msg)
+        await interaction.response.edit_message(
+            content=format_edit_fields_content(msg),
+            view=EditFieldsView(self.msg_id),
+        )
+
+
+class ScheduleModal(discord.ui.Modal, title="Set Send Time"):
+    time_input = discord.ui.TextInput(
+        label="Send time (Beijing time, UTC+8)",
+        placeholder="YYYY-MM-DD HH:MM",
+        max_length=16,
+    )
+
+    def __init__(self, msg_id: str):
+        super().__init__()
+        self.msg_id = msg_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        send_at = parse_send_at(self.time_input.value)
+        if send_at is None:
+            await interaction.response.send_message(
+                content="❌ Invalid or past time. Use format `YYYY-MM-DD HH:MM` (Beijing time).",
+                ephemeral=True,
+            )
+            return
+        msg = get_message(self.msg_id)
+        msg["status"] = "scheduled"
+        msg["send_at"] = send_at
+        upsert_message(msg)
+        display_time = send_at[:16].replace("T", " ")
+        await interaction.response.edit_message(
+            content=f"✅ Scheduled for **{display_time}** (UTC+8)\n\n{format_builder_content(msg)}",
+            view=BuilderMainView(self.msg_id),
+        )
+
+
+class NewMessageModal(discord.ui.Modal, title="New Message"):
+    label_input = discord.ui.TextInput(
+        label="Label (optional)",
+        placeholder='e.g. "May Announcement" — leave blank for auto label',
+        required=False,
+        max_length=100,
+    )
+
+    def __init__(self, channel_id: int):
+        super().__init__()
+        self.channel_id = channel_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        label = self.label_input.value.strip() or None
+        msg = new_draft(self.channel_id, label)
+        upsert_message(msg)
+        await interaction.response.edit_message(
+            content=format_builder_content(msg),
+            view=BuilderMainView(msg["id"]),
+        )
