@@ -2,49 +2,37 @@
 
 ## Overview
 
-Allow server admins to build and send rich Discord embeds (with title, description, footer, image, link button, and color) via an interactive builder inside Discord. Supports both immediate posting and scheduled delivery.
+Allow server admins to build and send rich Discord embeds (with title, description, footer, image, link button, and color) via an interactive builder inside Discord. Supports both immediate posting and scheduled delivery. Multiple drafts can coexist and be managed independently.
 
 ## Requirements
 
 - Single `/embed` slash command as entry point
-- Interactive field-by-field builder with live draft state
+- List view of all existing drafts and scheduled messages on entry
+- Interactive field-by-field builder with persistent draft state
+- Optional label per message for identification; falls back to auto-generated label
 - Preview (overview) before sending
 - Send immediately or schedule for a future time (UTC+8)
-- Scheduled messages persist across bot restarts
+- Edit or cancel scheduled messages via the same builder interface
+- All message state persists across bot restarts
 - Error message if bot lacks permission in selected channel
 
 ## Architecture
 
 **New file:** `cogs/embed_builder.py` — independent cog, hot-reloadable without affecting `roles.py`
 
-**Draft storage:** In-memory `dict[int, EmbedDraft]` keyed by `user_id`. Temporary; lost on restart (acceptable — drafts are short-lived).
+**Unified storage:** `messages.json` in project root — single JSON array covering both drafts and scheduled messages, distinguished by a `status` field. Read from and written to disk on every operation; never cached in memory.
 
-**Scheduled storage:** `scheduled_embeds.json` in project root — JSON array, written on every change.
+**Timer:** `discord.ext.tasks` loop every 60 seconds; sends and removes any entry with `status: "scheduled"` whose `send_at <= now`.
 
-**Timer:** `discord.ext.tasks` loop every 60 seconds; sends and removes any entry whose `send_at <= now`.
+## Data Model
 
-## Data Models
-
-### EmbedDraft (in-memory)
-
-```python
-@dataclass
-class EmbedDraft:
-    channel_id: int
-    title: str | None = None
-    description: str | None = None
-    footer: str | None = None
-    image_url: str | None = None
-    button_label: str | None = None
-    button_url: str | None = None
-    color: int | None = None  # e.g. 0x9B59B6
-```
-
-### Scheduled entry (JSON)
+Each entry in `messages.json`:
 
 ```json
 {
   "id": "uuid4-string",
+  "status": "draft | scheduled",
+  "label": "五月公告",
   "channel_id": 123456789,
   "send_at": "2026-05-20T20:00:00+08:00",
   "title": "Announcement",
@@ -57,20 +45,42 @@ class EmbedDraft:
 }
 ```
 
-All embed fields except `channel_id` and `send_at` are optional (null if not set).
+**Field notes:**
+- `label`: optional user-defined name; if null, display falls back to auto label (see below)
+- `send_at`: null for drafts, ISO 8601 string with UTC+8 offset for scheduled entries
+- All embed fields (title, description, footer, image_url, button_label, button_url, color) are optional (null if not set)
+
+**Auto label format** (used when `label` is null):
+
+```
+#channel-name · YYYY-MM-DD · "Title preview…"
+```
+
+If title is also null: `#channel-name · YYYY-MM-DD · (untitled)`
 
 ## Interaction Flow
 
-### Step 1 — Channel selection
+### Step 1 — Entry point
 
-User runs `/embed`. Bot replies with an ephemeral message containing a `ChannelSelect` dropdown (Discord native component — always reflects current server channels). User picks the target channel.
+User runs `/embed`.
 
-### Step 2 — Builder main view
+- **If `messages.json` has existing entries:** bot sends ephemeral message with a select dropdown listing all drafts and scheduled messages (max 25 entries shown), each labeled by its display label, plus a **[+ New Message]** button below.
+- **If no entries exist:** skip the list and go directly to Step 2 (new message flow).
 
-Bot updates the ephemeral message to show the builder:
+### Step 2 — New message creation
+
+User clicks **[+ New Message]** (or is sent here automatically if no messages exist).
+
+Bot sends an ephemeral channel select dropdown (`ChannelSelect` — always reflects current server channels). Below it, an optional **Label** text input (single line, max 100 chars). User selects channel and optionally fills label, then confirms.
+
+Bot creates a new draft entry in `messages.json` with the chosen channel and label, then transitions to the builder (Step 3).
+
+### Step 3 — Builder main view
+
+Bot updates the ephemeral message to show the current draft state:
 
 ```
-📋 Draft  |  #announcements
+📋 五月公告  |  #announcements  |  Draft
 
 Title:       (none)
 Description: (none)
@@ -82,7 +92,9 @@ Color:       (none)
 [Edit Fields]   [Overview]   [Send]
 ```
 
-### Step 3 — Edit Fields
+For scheduled entries, the header shows the scheduled time instead of "Draft".
+
+### Step 4 — Edit Fields
 
 Clicking **Edit Fields** updates the message to show field buttons:
 
@@ -94,53 +106,59 @@ Clicking **Edit Fields** updates the message to show field buttons:
 
 Clicking any button opens a modal with only that field's input(s):
 
-| Button | Modal inputs |
-|---|---|
-| Title | Single-line text (max 256 chars) |
-| Description | Paragraph text (max 4000 chars) |
-| Footer | Single-line text (max 2048 chars) |
-| Image URL | Single-line text, optional |
-| Link Button | Two inputs: Label + URL |
-| Color | Single-line hex input (e.g. `9B59B6` or `#9B59B6`), optional |
+| Button | Modal inputs | Constraints |
+|---|---|---|
+| Title | Single-line text | Max 256 chars |
+| Description | Paragraph text | Max 4000 chars |
+| Footer | Single-line text | Max 2048 chars |
+| Image URL | Single-line text | Optional; left blank = clear existing |
+| Link Button | Two inputs: Label + URL | Both optional; leaving blank clears both |
+| Color | Single-line hex (e.g. `9B59B6`) | Optional; left blank = clear existing |
 
-On submit, draft is updated and the Edit Fields view refreshes showing current values.
+On submit, the entry in `messages.json` is updated and the Edit Fields view refreshes to show current values.
 
-### Step 4 — Overview
+### Step 5 — Overview
 
-Clicking **Overview** sends a separate ephemeral message rendered as the actual Discord embed (with link button attached if set). This does not consume or clear the draft.
+Clicking **Overview** sends a separate ephemeral message rendered as the actual Discord embed (with link button attached if both label and URL are set). Does not consume or modify the draft.
 
-### Step 5 — Send
+### Step 6 — Send
 
-Clicking **Send** updates the message:
+Clicking **Send** updates the message based on current status:
 
+**If status is `draft`:**
 ```
 [Send Now]   [Schedule]   [← Back]
 ```
 
-**Send Now:** Posts the embed to the selected channel immediately. If the bot lacks permission, sends an ephemeral error instead. On success, clears the draft and confirms.
+**If status is `scheduled`:**
+```
+[Send Now]   [Update Schedule]   [Cancel Schedule]   [← Back]
+```
 
-**Schedule:** Opens a modal with one field — send time in `YYYY-MM-DD HH:MM` format (Beijing time / UTC+8). On submit, validates the format and that the time is in the future, saves to `scheduled_embeds.json`, clears the draft, and confirms with the formatted send time.
+**Send Now:** Posts the embed to the selected channel immediately. On permission error, sends an ephemeral error message. On success, removes the entry from `messages.json` and confirms.
+
+**Schedule / Update Schedule:** Opens a modal with one field — send time in `YYYY-MM-DD HH:MM` (Beijing time / UTC+8). Validates format and that the time is in the future. Updates `status` to `"scheduled"` and sets `send_at`. Confirms with the formatted send time.
+
+**Cancel Schedule:** Reverts `status` to `"draft"` and clears `send_at`. Confirms with ephemeral message. Entry remains editable.
 
 ## Embed Rendering
 
-Built from draft fields at send time:
-
 ```python
 embed = discord.Embed(
-    title=draft.title,
-    description=draft.description,
-    color=draft.color,
+    title=entry["title"],
+    description=entry["description"],
+    color=entry["color"],
 )
-if draft.footer:
-    embed.set_footer(text=draft.footer)
-if draft.image_url:
-    embed.set_image(url=draft.image_url)
+if entry["footer"]:
+    embed.set_footer(text=entry["footer"])
+if entry["image_url"]:
+    embed.set_image(url=entry["image_url"])
 
 view = discord.ui.View()
-if draft.button_label and draft.button_url:
+if entry["button_label"] and entry["button_url"]:
     view.add_item(discord.ui.Button(
-        label=draft.button_label,
-        url=draft.button_url,
+        label=entry["button_label"],
+        url=entry["button_url"],
         style=discord.ButtonStyle.link,
     ))
 ```
@@ -150,15 +168,16 @@ if draft.button_label and draft.button_url:
 | Scenario | Behavior |
 |---|---|
 | Bot lacks send permission in channel | Ephemeral error: "Bot doesn't have permission to post in #channel-name" |
-| Invalid hex color input | Modal rejects with ephemeral error; draft unchanged |
-| Invalid time format on schedule | Ephemeral error; modal does not proceed |
+| Invalid hex color input | Ephemeral error after modal submit; entry unchanged |
+| Invalid time format on schedule | Ephemeral error; entry unchanged |
 | Scheduled time is in the past | Ephemeral error; user must re-enter |
-| Channel deleted before scheduled send | Log error, skip and remove entry from JSON |
+| Channel deleted before scheduled send | Log error, remove entry from JSON, continue loop |
 | Image URL unreachable | Message sends; Discord shows broken image (acceptable) |
-| `scheduled_embeds.json` missing on startup | Create empty file and continue |
+| `messages.json` missing on startup | Create empty file and continue |
+| More than 25 messages in list | Show first 25 (sorted: scheduled first by send_at, then drafts by creation time) |
 
 ## Hot-Reload Compatibility
 
-- JSON is read/written on every operation, never cached
+- `messages.json` is read/written on every operation, never cached
 - Task loop stopped in `cog_unload`, restarted in `cog_load`
-- `!reload embed_builder` works cleanly; in-progress drafts are lost (acceptable)
+- `!reload embed_builder` works cleanly with no data loss (all state is on disk)
