@@ -533,7 +533,6 @@ class EditFieldsView(discord.ui.View):
             ("Image URL",   ImageModal,       bool(msg.get("image_url")),     1),
             ("Link Button", LinkButtonModal,  has_btn,                        1),
             ("Color",       ColorModal,       msg.get("color") is not None,   1),
-            ("Label",       LabelModal,       bool(msg.get("label")),         2),
         ]
         for field_label, modal_class, has_value, row in fields:
             self.add_item(FieldButton(msg_id, field_label, modal_class, has_value, row))
@@ -565,7 +564,11 @@ class BuilderMainView(discord.ui.View):
             content="**When to send?**", embed=None, view=SendView(self.msg_id),
         )
 
-    @discord.ui.button(label="← Messages", style=discord.ButtonStyle.secondary, row=1)
+    @discord.ui.button(label="Label", style=discord.ButtonStyle.secondary, row=1)
+    async def label_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(LabelModal(self.msg_id))
+
+    @discord.ui.button(label="← Back", style=discord.ButtonStyle.secondary, row=1)
     async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         messages = _sorted_messages()
         if messages:
