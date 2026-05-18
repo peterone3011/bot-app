@@ -373,3 +373,71 @@ class NewMessageModal(discord.ui.Modal, title="New Message"):
             content=format_builder_content(msg),
             view=BuilderMainView(msg["id"]),
         )
+
+
+# ---------------------------------------------------------------------------
+# Buttons
+# ---------------------------------------------------------------------------
+
+class SendNowButton(discord.ui.Button):
+    def __init__(self, msg_id: str):
+        super().__init__(label="Send Now", style=discord.ButtonStyle.success)
+        self.msg_id = msg_id
+
+    async def callback(self, interaction: discord.Interaction):
+        msg = get_message(self.msg_id)
+        channel = interaction.guild.get_channel(msg["channel_id"])
+        if channel is None:
+            await interaction.response.send_message(
+                content="❌ Target channel not found.", ephemeral=True
+            )
+            return
+        try:
+            await channel.send(embed=build_embed(msg), view=build_view(msg))
+            delete_message(self.msg_id)
+            await interaction.response.edit_message(
+                content=f"✅ Sent to {channel.mention}.", view=None
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                content=f"❌ Bot doesn't have permission to post in {channel.mention}.",
+                ephemeral=True,
+            )
+
+
+class ScheduleButton(discord.ui.Button):
+    def __init__(self, msg_id: str, label: str = "Schedule"):
+        super().__init__(label=label, style=discord.ButtonStyle.primary)
+        self.msg_id = msg_id
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(ScheduleModal(self.msg_id))
+
+
+class CancelScheduleButton(discord.ui.Button):
+    def __init__(self, msg_id: str):
+        super().__init__(label="Cancel Schedule", style=discord.ButtonStyle.danger)
+        self.msg_id = msg_id
+
+    async def callback(self, interaction: discord.Interaction):
+        msg = get_message(self.msg_id)
+        msg["status"] = "draft"
+        msg["send_at"] = None
+        upsert_message(msg)
+        await interaction.response.edit_message(
+            content=format_builder_content(msg),
+            view=BuilderMainView(self.msg_id),
+        )
+
+
+class BackToBuilderButton(discord.ui.Button):
+    def __init__(self, msg_id: str):
+        super().__init__(label="← Back", style=discord.ButtonStyle.secondary, row=1)
+        self.msg_id = msg_id
+
+    async def callback(self, interaction: discord.Interaction):
+        msg = get_message(self.msg_id)
+        await interaction.response.edit_message(
+            content=format_builder_content(msg),
+            view=BuilderMainView(self.msg_id),
+        )
