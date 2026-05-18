@@ -10,6 +10,7 @@ def test_new_draft_structure():
     assert draft["label"] is None
     assert draft["title"] is None
     assert draft["send_at"] is None
+    assert draft["message_id"] is None
     assert "id" in draft
     assert "created_at" in draft
 
@@ -19,11 +20,10 @@ def test_new_draft_with_label():
     assert draft["label"] == "May Announcement"
 
 
-def test_load_messages_creates_file(tmp_path, monkeypatch):
+def test_load_messages_returns_empty_when_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
     result = eb.load_messages()
     assert result == []
-    assert (tmp_path / "messages.json").exists()
 
 
 def test_upsert_inserts_new(tmp_path, monkeypatch):

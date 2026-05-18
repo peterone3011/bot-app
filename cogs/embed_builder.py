@@ -19,9 +19,10 @@ CST = timezone(timedelta(hours=8))
 # ---------------------------------------------------------------------------
 
 def load_messages() -> list[dict[str, Any]]:
-    if not MESSAGES_FILE.exists():
-        MESSAGES_FILE.write_text("[]", encoding="utf-8")
-    return json.loads(MESSAGES_FILE.read_text(encoding="utf-8"))
+    try:
+        return json.loads(MESSAGES_FILE.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
 
 
 def save_messages(messages: list[dict[str, Any]]) -> None:
