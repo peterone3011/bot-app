@@ -7,11 +7,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import os
+
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-MESSAGES_FILE = Path("messages.json")
+MESSAGES_FILE = Path(os.environ.get("MESSAGES_FILE", "messages.json"))
 CST = timezone(timedelta(hours=8))
 
 
