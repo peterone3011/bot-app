@@ -441,3 +441,90 @@ class BackToBuilderButton(discord.ui.Button):
             content=format_builder_content(msg),
             view=BuilderMainView(self.msg_id),
         )
+
+
+# ---------------------------------------------------------------------------
+# Views
+# ---------------------------------------------------------------------------
+
+class EditFieldsView(discord.ui.View):
+    def __init__(self, msg_id: str):
+        super().__init__(timeout=600)
+        self.msg_id = msg_id
+
+    @discord.ui.button(label="Title", style=discord.ButtonStyle.secondary, row=0)
+    async def title_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(TitleModal(self.msg_id))
+
+    @discord.ui.button(label="Description", style=discord.ButtonStyle.secondary, row=0)
+    async def desc_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(DescriptionModal(self.msg_id))
+
+    @discord.ui.button(label="Footer", style=discord.ButtonStyle.secondary, row=0)
+    async def footer_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(FooterModal(self.msg_id))
+
+    @discord.ui.button(label="Image URL", style=discord.ButtonStyle.secondary, row=1)
+    async def image_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ImageModal(self.msg_id))
+
+    @discord.ui.button(label="Link Button", style=discord.ButtonStyle.secondary, row=1)
+    async def link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(LinkButtonModal(self.msg_id))
+
+    @discord.ui.button(label="Color", style=discord.ButtonStyle.secondary, row=1)
+    async def color_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ColorModal(self.msg_id))
+
+    @discord.ui.button(label="← Back", style=discord.ButtonStyle.primary, row=2)
+    async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        msg = get_message(self.msg_id)
+        await interaction.response.edit_message(
+            content=format_builder_content(msg),
+            view=BuilderMainView(self.msg_id),
+        )
+
+
+class BuilderMainView(discord.ui.View):
+    def __init__(self, msg_id: str):
+        super().__init__(timeout=600)
+        self.msg_id = msg_id
+
+    @discord.ui.button(label="Edit Fields", style=discord.ButtonStyle.primary)
+    async def edit_fields(self, interaction: discord.Interaction, button: discord.ui.Button):
+        msg = get_message(self.msg_id)
+        await interaction.response.edit_message(
+            content=format_edit_fields_content(msg),
+            view=EditFieldsView(self.msg_id),
+        )
+
+    @discord.ui.button(label="Overview", style=discord.ButtonStyle.secondary)
+    async def overview(self, interaction: discord.Interaction, button: discord.ui.Button):
+        msg = get_message(self.msg_id)
+        await interaction.response.send_message(
+            embed=build_embed(msg),
+            view=build_view(msg),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Send", style=discord.ButtonStyle.success)
+    async def send_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        msg = get_message(self.msg_id)
+        await interaction.response.edit_message(
+            content="**When to send?**",
+            view=SendView(self.msg_id),
+        )
+
+
+class SendView(discord.ui.View):
+    def __init__(self, msg_id: str):
+        super().__init__(timeout=600)
+        msg = get_message(msg_id)
+        is_scheduled = msg and msg["status"] == "scheduled"
+        self.add_item(SendNowButton(msg_id))
+        if is_scheduled:
+            self.add_item(ScheduleButton(msg_id, label="Update Schedule"))
+            self.add_item(CancelScheduleButton(msg_id))
+        else:
+            self.add_item(ScheduleButton(msg_id))
+        self.add_item(BackToBuilderButton(msg_id))
