@@ -52,7 +52,7 @@ def delete_message(msg_id: str) -> None:
     save_messages([m for m in load_messages() if m["id"] != msg_id])
 
 
-def new_draft(channel_id: int, label: str | None = None) -> dict[str, Any]:
+def new_draft(channel_id: int, label: str | None = None, color: int | None = None) -> dict[str, Any]:
     return {
         "id": str(uuid.uuid4()),
         "status": "draft",
@@ -67,8 +67,16 @@ def new_draft(channel_id: int, label: str | None = None) -> dict[str, Any]:
         "image_url": None,
         "button_label": None,
         "button_url": None,
-        "color": None,
+        "color": color,
     }
+
+
+def last_used_color() -> int | None:
+    colored = [m for m in load_messages() if m.get("color") is not None]
+    if not colored:
+        return None
+    colored.sort(key=lambda m: m.get("created_at", ""), reverse=True)
+    return colored[0]["color"]
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +112,7 @@ def parse_send_at(value: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 def build_embed(msg: dict[str, Any]) -> discord.Embed:
+    """Builds the actual Discord embed for sending/publishing."""
     embed = discord.Embed(
         title=msg["title"],
         description=msg["description"],
@@ -117,6 +126,7 @@ def build_embed(msg: dict[str, Any]) -> discord.Embed:
 
 
 def build_view(msg: dict[str, Any]) -> discord.ui.View | None:
+    """Builds the link button view for the published message."""
     if not (msg["button_label"] and msg["button_url"]):
         return None
     view = discord.ui.View()
@@ -126,6 +136,39 @@ def build_view(msg: dict[str, Any]) -> discord.ui.View | None:
         style=discord.ButtonStyle.link,
     ))
     return view
+
+
+def build_builder_embed(msg: dict[str, Any]) -> discord.Embed:
+    """Builds the builder UI embed showing current draft/scheduled/published state."""
+    if msg["status"] == "scheduled" and msg.get("send_at"):
+        status = f"▶️ Scheduled · {msg['send_at'][:16].replace('T', ' ')} (UTC+8)"
+    elif msg["status"] == "published":
+        status = "✅ Published"
+    else:
+        status = "🔴 Draft"
+
+    desc_text = msg.get("description") or ""
+    desc_preview = (desc_text[:100] + "…") if len(desc_text) > 100 else (desc_text or "*(none)*")
+    btn = (
+        f"{msg['button_label']} | {msg['button_url']}"
+        if (msg.get("button_label") and msg.get("button_url"))
+        else "*(none)*"
+    )
+    color_str = f"#{msg['color']:06X}" if msg.get("color") is not None else "*(none)*"
+
+    lines: list[str] = []
+    if msg.get("label"):
+        lines.append(f"**{msg['label']}**")
+    lines.append(f"<#{msg['channel_id']}> · {status}")
+    lines.append("")
+    lines.append(f"**Title:** {msg.get('title') or '*(none)*'}")
+    lines.append(f"**Description:** {desc_preview}")
+    lines.append(f"**Footer:** {msg.get('footer') or '*(none)*'}")
+    lines.append(f"**Image:** {'set ✓' if msg.get('image_url') else '*(none)*'}")
+    lines.append(f"**Button:** {btn}")
+    lines.append(f"**Color:** {color_str}")
+
+    return discord.Embed(description="\n".join(lines), color=msg.get("color"))
 
 
 def display_label(msg: dict[str, Any], bot: commands.Bot | None) -> str:
@@ -140,39 +183,6 @@ def display_label(msg: dict[str, Any], bot: commands.Bot | None) -> str:
     title = msg.get("title") or ""
     preview = (title[:20] + "…") if len(title) > 20 else (title or "(untitled)")
     return f"{ch_name} · {date} · \"{preview}\""
-
-
-# ---------------------------------------------------------------------------
-# Content formatters
-# ---------------------------------------------------------------------------
-
-def _field_summary(msg: dict[str, Any]) -> str:
-    color_val = msg["color"]
-    color_str = f"#{color_val:06X}" if color_val is not None else "(none)"
-    desc = msg["description"] or ""
-    desc_preview = (desc[:50] + "…") if len(desc) > 50 else (desc or "(none)")
-    btn = f"{msg['button_label']} | {msg['button_url']}" if (msg["button_label"] and msg["button_url"]) else "(none)"
-    return "\n".join([
-        f"Title:       {msg['title'] or '(none)'}",
-        f"Description: {desc_preview}",
-        f"Footer:      {msg['footer'] or '(none)'}",
-        f"Image:       {'set' if msg['image_url'] else '(none)'}",
-        f"Button:      {btn}",
-        f"Color:       {color_str}",
-    ])
-
-
-def format_builder_content(msg: dict[str, Any]) -> str:
-    status = "Scheduled" if msg["status"] == "scheduled" else "Draft"
-    send_time = ""
-    if msg["send_at"]:
-        send_time = " · " + msg["send_at"][:16].replace("T", " ")
-    header = f"**{msg.get('label') or '(untitled)'}**  |  <#{msg['channel_id']}>  |  {status}{send_time}"
-    return f"{header}\n\n```\n{_field_summary(msg)}\n```"
-
-
-def format_edit_fields_content(msg: dict[str, Any]) -> str:
-    return f"**Edit Fields** — click a field to update it\n\n```\n{_field_summary(msg)}\n```"
 
 
 def parse_message_link(link: str) -> tuple[int, int] | None:
@@ -210,16 +220,24 @@ def draft_from_message(message: discord.Message) -> dict[str, Any]:
     return draft
 
 
+def _sorted_messages() -> list[dict[str, Any]]:
+    order = {"scheduled": 0, "draft": 1, "published": 2}
+    return sorted(
+        load_messages(),
+        key=lambda m: (
+            order.get(m["status"], 3),
+            m.get("send_at") or m.get("created_at", ""),
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Modals
 # ---------------------------------------------------------------------------
 
 class TitleModal(discord.ui.Modal, title="Update Title"):
     value_input = discord.ui.TextInput(
-        label="Title",
-        max_length=256,
-        required=False,
-        placeholder="Leave blank to clear",
+        label="Title", max_length=256, required=False, placeholder="Leave blank to clear",
     )
 
     def __init__(self, msg_id: str):
@@ -231,18 +249,14 @@ class TitleModal(discord.ui.Modal, title="Update Title"):
         msg["title"] = self.value_input.value.strip() or None
         upsert_message(msg)
         await interaction.response.edit_message(
-            content=format_edit_fields_content(msg),
-            view=EditFieldsView(self.msg_id),
+            embed=build_builder_embed(msg), view=EditFieldsView(self.msg_id),
         )
 
 
 class DescriptionModal(discord.ui.Modal, title="Update Description"):
     value_input = discord.ui.TextInput(
-        label="Description",
-        style=discord.TextStyle.paragraph,
-        max_length=4000,
-        required=False,
-        placeholder="Leave blank to clear",
+        label="Description", style=discord.TextStyle.paragraph,
+        max_length=4000, required=False, placeholder="Leave blank to clear",
     )
 
     def __init__(self, msg_id: str):
@@ -254,17 +268,13 @@ class DescriptionModal(discord.ui.Modal, title="Update Description"):
         msg["description"] = self.value_input.value.strip() or None
         upsert_message(msg)
         await interaction.response.edit_message(
-            content=format_edit_fields_content(msg),
-            view=EditFieldsView(self.msg_id),
+            embed=build_builder_embed(msg), view=EditFieldsView(self.msg_id),
         )
 
 
 class FooterModal(discord.ui.Modal, title="Update Footer"):
     value_input = discord.ui.TextInput(
-        label="Footer",
-        max_length=2048,
-        required=False,
-        placeholder="Leave blank to clear",
+        label="Footer", max_length=2048, required=False, placeholder="Leave blank to clear",
     )
 
     def __init__(self, msg_id: str):
@@ -276,16 +286,13 @@ class FooterModal(discord.ui.Modal, title="Update Footer"):
         msg["footer"] = self.value_input.value.strip() or None
         upsert_message(msg)
         await interaction.response.edit_message(
-            content=format_edit_fields_content(msg),
-            view=EditFieldsView(self.msg_id),
+            embed=build_builder_embed(msg), view=EditFieldsView(self.msg_id),
         )
 
 
 class ImageModal(discord.ui.Modal, title="Update Image URL"):
     value_input = discord.ui.TextInput(
-        label="Image URL",
-        required=False,
-        placeholder="Leave blank to clear",
+        label="Image URL", required=False, placeholder="Leave blank to clear",
     )
 
     def __init__(self, msg_id: str):
@@ -297,22 +304,17 @@ class ImageModal(discord.ui.Modal, title="Update Image URL"):
         msg["image_url"] = self.value_input.value.strip() or None
         upsert_message(msg)
         await interaction.response.edit_message(
-            content=format_edit_fields_content(msg),
-            view=EditFieldsView(self.msg_id),
+            embed=build_builder_embed(msg), view=EditFieldsView(self.msg_id),
         )
 
 
 class LinkButtonModal(discord.ui.Modal, title="Update Link Button"):
     label_input = discord.ui.TextInput(
-        label="Button Label",
-        max_length=80,
-        required=False,
+        label="Button Label", max_length=80, required=False,
         placeholder="Leave blank to remove button",
     )
     url_input = discord.ui.TextInput(
-        label="Button URL",
-        required=False,
-        placeholder="https://...",
+        label="Button URL", required=False, placeholder="https://...",
     )
 
     def __init__(self, msg_id: str):
@@ -325,16 +327,13 @@ class LinkButtonModal(discord.ui.Modal, title="Update Link Button"):
         msg["button_url"] = self.url_input.value.strip() or None
         upsert_message(msg)
         await interaction.response.edit_message(
-            content=format_edit_fields_content(msg),
-            view=EditFieldsView(self.msg_id),
+            embed=build_builder_embed(msg), view=EditFieldsView(self.msg_id),
         )
 
 
 class ColorModal(discord.ui.Modal, title="Update Color"):
     value_input = discord.ui.TextInput(
-        label="Hex Color (e.g. 9B59B6)",
-        max_length=7,
-        required=False,
+        label="Hex Color (e.g. 9B59B6)", max_length=7, required=False,
         placeholder="Leave blank to clear",
     )
 
@@ -354,8 +353,26 @@ class ColorModal(discord.ui.Modal, title="Update Color"):
         msg["color"] = result
         upsert_message(msg)
         await interaction.response.edit_message(
-            content=format_edit_fields_content(msg),
-            view=EditFieldsView(self.msg_id),
+            embed=build_builder_embed(msg), view=EditFieldsView(self.msg_id),
+        )
+
+
+class LabelModal(discord.ui.Modal, title="Update Label"):
+    value_input = discord.ui.TextInput(
+        label="Label (optional)", required=False, max_length=100,
+        placeholder='e.g. "May Announcement" — leave blank to clear',
+    )
+
+    def __init__(self, msg_id: str):
+        super().__init__()
+        self.msg_id = msg_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        msg = get_message(self.msg_id)
+        msg["label"] = self.value_input.value.strip() or None
+        upsert_message(msg)
+        await interaction.response.edit_message(
+            embed=build_builder_embed(msg), view=EditFieldsView(self.msg_id),
         )
 
 
@@ -382,32 +399,8 @@ class ScheduleModal(discord.ui.Modal, title="Set Send Time"):
         msg["status"] = "scheduled"
         msg["send_at"] = send_at
         upsert_message(msg)
-        display_time = send_at[:16].replace("T", " ")
         await interaction.response.edit_message(
-            content=f"✅ Scheduled for **{display_time}** (UTC+8)\n\n{format_builder_content(msg)}",
-            view=BuilderMainView(self.msg_id),
-        )
-
-
-class NewMessageModal(discord.ui.Modal, title="New Message"):
-    label_input = discord.ui.TextInput(
-        label="Label (optional)",
-        placeholder='e.g. "May Announcement" — leave blank for auto label',
-        required=False,
-        max_length=100,
-    )
-
-    def __init__(self, channel_id: int):
-        super().__init__()
-        self.channel_id = channel_id
-
-    async def on_submit(self, interaction: discord.Interaction):
-        label = self.label_input.value.strip() or None
-        msg = new_draft(self.channel_id, label)
-        upsert_message(msg)
-        await interaction.response.edit_message(
-            content=format_builder_content(msg),
-            view=BuilderMainView(msg["id"]),
+            embed=build_builder_embed(msg), view=BuilderMainView(self.msg_id),
         )
 
 
@@ -425,14 +418,16 @@ class SendNowButton(discord.ui.Button):
         channel = interaction.guild.get_channel(msg["channel_id"])
         if channel is None:
             await interaction.response.send_message(
-                content="❌ Target channel not found.", ephemeral=True
+                content="❌ Target channel not found.", ephemeral=True,
             )
             return
         try:
-            await channel.send(embed=build_embed(msg), view=build_view(msg))
-            delete_message(self.msg_id)
+            sent = await channel.send(embed=build_embed(msg), view=build_view(msg))
+            msg["status"] = "published"
+            msg["message_id"] = sent.id
+            upsert_message(msg)
             await interaction.response.edit_message(
-                content=f"✅ Sent to {channel.mention}.", view=None
+                content=f"✅ Sent to {channel.mention}.", embed=None, view=None,
             )
         except discord.Forbidden:
             await interaction.response.send_message(
@@ -461,21 +456,19 @@ class CancelScheduleButton(discord.ui.Button):
         msg["send_at"] = None
         upsert_message(msg)
         await interaction.response.edit_message(
-            content=format_builder_content(msg),
-            view=BuilderMainView(self.msg_id),
+            content=None, embed=build_builder_embed(msg), view=BuilderMainView(self.msg_id),
         )
 
 
 class BackToBuilderButton(discord.ui.Button):
-    def __init__(self, msg_id: str):
-        super().__init__(label="← Back", style=discord.ButtonStyle.secondary, row=1)
+    def __init__(self, msg_id: str, row: int = 1):
+        super().__init__(label="← Back", style=discord.ButtonStyle.secondary, row=row)
         self.msg_id = msg_id
 
     async def callback(self, interaction: discord.Interaction):
         msg = get_message(self.msg_id)
         await interaction.response.edit_message(
-            content=format_builder_content(msg),
-            view=BuilderMainView(self.msg_id),
+            content=None, embed=build_builder_embed(msg), view=BuilderMainView(self.msg_id),
         )
 
 
@@ -493,18 +486,33 @@ class SaveChangesButton(discord.ui.Button):
         try:
             original = await channel.fetch_message(draft["message_id"])
             await original.edit(embed=build_embed(draft), view=build_view(draft))
-            delete_message(self.msg_id)
+            draft["status"] = "published"
+            upsert_message(draft)
             await interaction.response.edit_message(
-                content=f"✅ Embed updated in {channel.mention}.", view=None
+                content=f"✅ Embed updated in {channel.mention}.", embed=None, view=None,
             )
         except discord.NotFound:
             await interaction.response.send_message(
-                "❌ Original message not found (may have been deleted).", ephemeral=True
+                "❌ Original message not found (may have been deleted).", ephemeral=True,
             )
         except discord.Forbidden:
             await interaction.response.send_message(
-                "❌ Bot lacks permission to edit that message.", ephemeral=True
+                "❌ Bot lacks permission to edit that message.", ephemeral=True,
             )
+
+
+class FieldButton(discord.ui.Button):
+    """Dynamic field button: green with 'Update X' label when the field has a value."""
+
+    def __init__(self, msg_id: str, field_label: str, modal_class: type, has_value: bool, row: int):
+        label = f"Update {field_label}" if has_value else field_label
+        style = discord.ButtonStyle.success if has_value else discord.ButtonStyle.secondary
+        super().__init__(label=label, style=style, row=row)
+        self.msg_id = msg_id
+        self.modal_class = modal_class
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(self.modal_class(self.msg_id))
 
 
 # ---------------------------------------------------------------------------
@@ -514,39 +522,20 @@ class SaveChangesButton(discord.ui.Button):
 class EditFieldsView(discord.ui.View):
     def __init__(self, msg_id: str):
         super().__init__(timeout=600)
-        self.msg_id = msg_id
-
-    @discord.ui.button(label="Title", style=discord.ButtonStyle.secondary, row=0)
-    async def title_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(TitleModal(self.msg_id))
-
-    @discord.ui.button(label="Description", style=discord.ButtonStyle.secondary, row=0)
-    async def desc_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(DescriptionModal(self.msg_id))
-
-    @discord.ui.button(label="Footer", style=discord.ButtonStyle.secondary, row=0)
-    async def footer_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(FooterModal(self.msg_id))
-
-    @discord.ui.button(label="Image URL", style=discord.ButtonStyle.secondary, row=1)
-    async def image_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(ImageModal(self.msg_id))
-
-    @discord.ui.button(label="Link Button", style=discord.ButtonStyle.secondary, row=1)
-    async def link_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(LinkButtonModal(self.msg_id))
-
-    @discord.ui.button(label="Color", style=discord.ButtonStyle.secondary, row=1)
-    async def color_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(ColorModal(self.msg_id))
-
-    @discord.ui.button(label="← Back", style=discord.ButtonStyle.primary, row=2)
-    async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        msg = get_message(self.msg_id)
-        await interaction.response.edit_message(
-            content=format_builder_content(msg),
-            view=BuilderMainView(self.msg_id),
-        )
+        msg = get_message(msg_id)
+        has_btn = bool(msg.get("button_label") and msg.get("button_url"))
+        fields = [
+            ("Title",       TitleModal,       bool(msg.get("title")),        0),
+            ("Description", DescriptionModal, bool(msg.get("description")),  0),
+            ("Footer",      FooterModal,      bool(msg.get("footer")),        0),
+            ("Image URL",   ImageModal,       bool(msg.get("image_url")),     1),
+            ("Link Button", LinkButtonModal,  has_btn,                        1),
+            ("Color",       ColorModal,       msg.get("color") is not None,   1),
+            ("Label",       LabelModal,       bool(msg.get("label")),         2),
+        ]
+        for field_label, modal_class, has_value, row in fields:
+            self.add_item(FieldButton(msg_id, field_label, modal_class, has_value, row))
+        self.add_item(BackToBuilderButton(msg_id, row=2))
 
 
 class BuilderMainView(discord.ui.View):
@@ -554,29 +543,75 @@ class BuilderMainView(discord.ui.View):
         super().__init__(timeout=600)
         self.msg_id = msg_id
 
-    @discord.ui.button(label="Edit Fields", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Edit Fields", style=discord.ButtonStyle.primary, row=0)
     async def edit_fields(self, interaction: discord.Interaction, button: discord.ui.Button):
         msg = get_message(self.msg_id)
         await interaction.response.edit_message(
-            content=format_edit_fields_content(msg),
-            view=EditFieldsView(self.msg_id),
+            embed=build_builder_embed(msg), view=EditFieldsView(self.msg_id),
         )
 
-    @discord.ui.button(label="Overview", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Overview", style=discord.ButtonStyle.secondary, row=0)
     async def overview(self, interaction: discord.Interaction, button: discord.ui.Button):
         msg = get_message(self.msg_id)
         await interaction.response.send_message(
-            embed=build_embed(msg),
-            view=build_view(msg),
-            ephemeral=True,
+            embed=build_embed(msg), view=build_view(msg), ephemeral=True,
         )
 
-    @discord.ui.button(label="Send", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Send", style=discord.ButtonStyle.success, row=0)
     async def send_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(
+            content="**When to send?**", embed=None, view=SendView(self.msg_id),
+        )
+
+    @discord.ui.button(label="← Messages", style=discord.ButtonStyle.secondary, row=1)
+    async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        messages = _sorted_messages()
+        if messages:
+            await interaction.response.edit_message(
+                content="Select a message to edit, or create a new one:",
+                embed=None,
+                view=MessageListView(messages, interaction.client),
+            )
+        else:
+            await interaction.response.edit_message(
+                content="Select the channel to post in:", embed=None, view=NewMessageView(),
+            )
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, row=1)
+    async def delete_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         msg = get_message(self.msg_id)
         await interaction.response.edit_message(
-            content="**When to send?**",
-            view=SendView(self.msg_id),
+            content="⚠️ **Delete this message?** This cannot be undone.",
+            embed=build_builder_embed(msg),
+            view=ConfirmDeleteView(self.msg_id),
+        )
+
+
+class ConfirmDeleteView(discord.ui.View):
+    def __init__(self, msg_id: str):
+        super().__init__(timeout=60)
+        self.msg_id = msg_id
+
+    @discord.ui.button(label="⚠️ Confirm Delete", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        delete_message(self.msg_id)
+        messages = _sorted_messages()
+        if messages:
+            await interaction.response.edit_message(
+                content="Select a message to edit, or create a new one:",
+                embed=None,
+                view=MessageListView(messages, interaction.client),
+            )
+        else:
+            await interaction.response.edit_message(
+                content="Select the channel to post in:", embed=None, view=NewMessageView(),
+            )
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        msg = get_message(self.msg_id)
+        await interaction.response.edit_message(
+            content=None, embed=build_builder_embed(msg), view=BuilderMainView(self.msg_id),
         )
 
 
@@ -608,7 +643,11 @@ class NewMessageChannelSelect(discord.ui.ChannelSelect):
 
     async def callback(self, interaction: discord.Interaction):
         channel = self.values[0]
-        await interaction.response.send_modal(NewMessageModal(channel.id))
+        msg = new_draft(channel.id, color=last_used_color())
+        upsert_message(msg)
+        await interaction.response.edit_message(
+            content=None, embed=build_builder_embed(msg), view=BuilderMainView(msg["id"]),
+        )
 
 
 class NewMessageView(discord.ui.View):
@@ -619,18 +658,21 @@ class NewMessageView(discord.ui.View):
 
 class MessageSelect(discord.ui.Select):
     def __init__(self, messages: list[dict[str, Any]], bot: commands.Bot):
-        options = []
-        for msg in messages[:25]:
-            label = display_label(msg, bot)[:100]
-            emoji = "📅" if msg["status"] == "scheduled" else "📝"
-            options.append(discord.SelectOption(label=label, value=msg["id"], emoji=emoji))
-        super().__init__(placeholder="Select a message to edit...", options=options)
+        emoji_map = {"scheduled": "▶️", "published": "✅", "draft": "🔴"}
+        options = [
+            discord.SelectOption(
+                label=display_label(msg, bot)[:100],
+                value=msg["id"],
+                emoji=emoji_map.get(msg["status"], "🔴"),
+            )
+            for msg in messages[:25]
+        ]
+        super().__init__(placeholder="Select a message...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         msg = get_message(self.values[0])
         await interaction.response.edit_message(
-            content=format_builder_content(msg),
-            view=BuilderMainView(self.values[0]),
+            content=None, embed=build_builder_embed(msg), view=BuilderMainView(self.values[0]),
         )
 
 
@@ -642,8 +684,7 @@ class MessageListView(discord.ui.View):
     @discord.ui.button(label="+ New Message", style=discord.ButtonStyle.primary, row=1)
     async def new_message(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(
-            content="Select the channel to post in:",
-            view=NewMessageView(),
+            content="Select the channel to post in:", embed=None, view=NewMessageView(),
         )
 
 
@@ -675,8 +716,10 @@ class EmbedBuilderCog(commands.Cog):
                 delete_message(msg["id"])
                 continue
             try:
-                await channel.send(embed=build_embed(msg), view=build_view(msg))
-                delete_message(msg["id"])
+                sent = await channel.send(embed=build_embed(msg), view=build_view(msg))
+                msg["status"] = "published"
+                msg["message_id"] = sent.id
+                upsert_message(msg)
             except Exception as e:
                 print(f"[embed_builder] Failed to send {msg['id']}: {e}")
 
@@ -687,10 +730,7 @@ class EmbedBuilderCog(commands.Cog):
     @app_commands.command(name="embed", description="Build and send a rich embed message")
     @app_commands.guild_only()
     async def embed_cmd(self, interaction: discord.Interaction):
-        messages = sorted(
-            load_messages(),
-            key=lambda m: (m["status"] != "scheduled", m.get("send_at") or m.get("created_at", "")),
-        )
+        messages = _sorted_messages()
         if messages:
             await interaction.response.send_message(
                 content="Select a message to edit, or create a new one:",
@@ -723,18 +763,18 @@ class EmbedBuilderCog(commands.Cog):
             return
         if message.author != self.bot.user:
             await interaction.response.send_message(
-                "❌ That message was not sent by this bot.", ephemeral=True
+                "❌ That message was not sent by this bot.", ephemeral=True,
             )
             return
         if not message.embeds:
             await interaction.response.send_message(
-                "❌ That message has no embed.", ephemeral=True
+                "❌ That message has no embed.", ephemeral=True,
             )
             return
         draft = draft_from_message(message)
         upsert_message(draft)
         await interaction.response.send_message(
-            content=format_builder_content(draft),
+            embed=build_builder_embed(draft),
             view=BuilderMainView(draft["id"]),
             ephemeral=True,
         )
@@ -749,18 +789,18 @@ async def setup(bot: commands.Bot):
     async def edit_embed_menu(interaction: discord.Interaction, message: discord.Message):
         if message.author != bot.user:
             await interaction.response.send_message(
-                "❌ That message was not sent by this bot.", ephemeral=True
+                "❌ That message was not sent by this bot.", ephemeral=True,
             )
             return
         if not message.embeds:
             await interaction.response.send_message(
-                "❌ That message has no embed.", ephemeral=True
+                "❌ That message has no embed.", ephemeral=True,
             )
             return
         draft = draft_from_message(message)
         upsert_message(draft)
         await interaction.response.send_message(
-            content=format_builder_content(draft),
+            embed=build_builder_embed(draft),
             view=BuilderMainView(draft["id"]),
             ephemeral=True,
         )

@@ -11,6 +11,7 @@ def test_new_draft_structure():
     assert draft["title"] is None
     assert draft["send_at"] is None
     assert draft["message_id"] is None
+    assert draft["color"] is None
     assert "id" in draft
     assert "created_at" in draft
 
@@ -18,6 +19,11 @@ def test_new_draft_structure():
 def test_new_draft_with_label():
     draft = eb.new_draft(111, label="May Announcement")
     assert draft["label"] == "May Announcement"
+
+
+def test_new_draft_with_color():
+    draft = eb.new_draft(111, color=0x9B59B6)
+    assert draft["color"] == 0x9B59B6
 
 
 def test_load_messages_returns_empty_when_missing(tmp_path, monkeypatch):
@@ -172,13 +178,33 @@ def test_build_view_partial_button():
     assert eb.build_view(_full_msg(button_url=None)) is None
 
 
-def test_field_summary_partial_button_shows_none():
-    msg = eb.new_draft(1)
-    msg["button_label"] = "Click"
-    msg["button_url"] = None
-    summary = eb._field_summary(msg)
-    assert "Click | None" not in summary
-    assert "Button:      (none)" in summary
+# ---------------------------------------------------------------------------
+# last_used_color
+# ---------------------------------------------------------------------------
+
+def test_last_used_color_no_messages(tmp_path, monkeypatch):
+    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
+    assert eb.last_used_color() is None
+
+
+def test_last_used_color_returns_most_recent(tmp_path, monkeypatch):
+    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
+    old = eb.new_draft(1, color=0xFF0000)
+    old["created_at"] = "2026-01-01T00:00:00+08:00"
+    new = eb.new_draft(2, color=0x00FF00)
+    new["created_at"] = "2026-06-01T00:00:00+08:00"
+    eb.upsert_message(old)
+    eb.upsert_message(new)
+    assert eb.last_used_color() == 0x00FF00
+
+
+def test_last_used_color_skips_uncolored(tmp_path, monkeypatch):
+    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
+    no_color = eb.new_draft(1)
+    colored = eb.new_draft(2, color=0xABCDEF)
+    eb.upsert_message(no_color)
+    eb.upsert_message(colored)
+    assert eb.last_used_color() == 0xABCDEF
 
 
 # ---------------------------------------------------------------------------
