@@ -193,6 +193,9 @@ def draft_from_message(message: discord.Message) -> dict[str, Any]:
                 button_label = component.label
                 button_url = component.url
                 break
+        else:
+            continue
+        break
 
     draft = new_draft(message.channel.id)
     if embed:
