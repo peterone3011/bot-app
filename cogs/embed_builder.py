@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -172,6 +173,38 @@ def format_builder_content(msg: dict[str, Any]) -> str:
 
 def format_edit_fields_content(msg: dict[str, Any]) -> str:
     return f"**Edit Fields** — click a field to update it\n\n```\n{_field_summary(msg)}\n```"
+
+
+def parse_message_link(link: str) -> tuple[int, int] | None:
+    """Returns (channel_id, message_id) from a Discord message URL, or None."""
+    match = re.search(r"channels/\d+/(\d+)/(\d+)", link)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def draft_from_message(message: discord.Message) -> dict[str, Any]:
+    embed = message.embeds[0] if message.embeds else None
+    button_label = None
+    button_url = None
+    for row in message.components:
+        for component in row.children:
+            if getattr(component, "url", None):
+                button_label = component.label
+                button_url = component.url
+                break
+
+    draft = new_draft(message.channel.id)
+    if embed:
+        draft["title"] = embed.title or None
+        draft["description"] = embed.description or None
+        draft["footer"] = embed.footer.text if embed.footer else None
+        draft["image_url"] = embed.image.url if embed.image else None
+        draft["color"] = embed.color.value if embed.color else None
+    draft["button_label"] = button_label
+    draft["button_url"] = button_url
+    draft["message_id"] = message.id
+    return draft
 
 
 # ---------------------------------------------------------------------------
@@ -443,6 +476,34 @@ class BackToBuilderButton(discord.ui.Button):
         )
 
 
+class SaveChangesButton(discord.ui.Button):
+    def __init__(self, msg_id: str):
+        super().__init__(label="Save Changes", style=discord.ButtonStyle.success)
+        self.msg_id = msg_id
+
+    async def callback(self, interaction: discord.Interaction):
+        draft = get_message(self.msg_id)
+        channel = interaction.guild.get_channel(draft["channel_id"])
+        if channel is None:
+            await interaction.response.send_message("❌ Channel not found.", ephemeral=True)
+            return
+        try:
+            original = await channel.fetch_message(draft["message_id"])
+            await original.edit(embed=build_embed(draft), view=build_view(draft))
+            delete_message(self.msg_id)
+            await interaction.response.edit_message(
+                content=f"✅ Embed updated in {channel.mention}.", view=None
+            )
+        except discord.NotFound:
+            await interaction.response.send_message(
+                "❌ Original message not found (may have been deleted).", ephemeral=True
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "❌ Bot lacks permission to edit that message.", ephemeral=True
+            )
+
+
 # ---------------------------------------------------------------------------
 # Views
 # ---------------------------------------------------------------------------
@@ -520,13 +581,18 @@ class SendView(discord.ui.View):
     def __init__(self, msg_id: str):
         super().__init__(timeout=600)
         msg = get_message(msg_id)
+        is_edit = bool(msg and msg.get("message_id"))
         is_scheduled = msg and msg["status"] == "scheduled"
-        self.add_item(SendNowButton(msg_id))
-        if is_scheduled:
-            self.add_item(ScheduleButton(msg_id, label="Update Schedule"))
-            self.add_item(CancelScheduleButton(msg_id))
+
+        if is_edit:
+            self.add_item(SaveChangesButton(msg_id))
         else:
-            self.add_item(ScheduleButton(msg_id))
+            self.add_item(SendNowButton(msg_id))
+            if is_scheduled:
+                self.add_item(ScheduleButton(msg_id, label="Update Schedule"))
+                self.add_item(CancelScheduleButton(msg_id))
+            else:
+                self.add_item(ScheduleButton(msg_id))
         self.add_item(BackToBuilderButton(msg_id))
 
 
@@ -633,6 +699,65 @@ class EmbedBuilderCog(commands.Cog):
                 ephemeral=True,
             )
 
+    @app_commands.command(name="edit-embed", description="Edit a published embed by message link")
+    @app_commands.guild_only()
+    async def edit_embed_cmd(self, interaction: discord.Interaction, message_link: str):
+        result = parse_message_link(message_link)
+        if result is None:
+            await interaction.response.send_message("❌ Invalid message link.", ephemeral=True)
+            return
+        channel_id, message_id = result
+        channel = interaction.guild.get_channel(channel_id)
+        if channel is None:
+            await interaction.response.send_message("❌ Channel not found.", ephemeral=True)
+            return
+        try:
+            message = await channel.fetch_message(message_id)
+        except discord.NotFound:
+            await interaction.response.send_message("❌ Message not found.", ephemeral=True)
+            return
+        if message.author != self.bot.user:
+            await interaction.response.send_message(
+                "❌ That message was not sent by this bot.", ephemeral=True
+            )
+            return
+        if not message.embeds:
+            await interaction.response.send_message(
+                "❌ That message has no embed.", ephemeral=True
+            )
+            return
+        draft = draft_from_message(message)
+        upsert_message(draft)
+        await interaction.response.send_message(
+            content=format_builder_content(draft),
+            view=BuilderMainView(draft["id"]),
+            ephemeral=True,
+        )
+
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(EmbedBuilderCog(bot))
+    cog = EmbedBuilderCog(bot)
+    await bot.add_cog(cog)
+
+    @app_commands.context_menu(name="Edit Embed")
+    @app_commands.guild_only()
+    async def edit_embed_menu(interaction: discord.Interaction, message: discord.Message):
+        if message.author != bot.user:
+            await interaction.response.send_message(
+                "❌ That message was not sent by this bot.", ephemeral=True
+            )
+            return
+        if not message.embeds:
+            await interaction.response.send_message(
+                "❌ That message has no embed.", ephemeral=True
+            )
+            return
+        draft = draft_from_message(message)
+        upsert_message(draft)
+        await interaction.response.send_message(
+            content=format_builder_content(draft),
+            view=BuilderMainView(draft["id"]),
+            ephemeral=True,
+        )
+
+    bot.tree.add_command(edit_embed_menu)

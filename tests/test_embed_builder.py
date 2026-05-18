@@ -211,3 +211,85 @@ def test_display_label_auto_no_title():
     msg = {"label": None, "channel_id": 1, "created_at": "2026-05-18T10:00:00+08:00", "title": None}
     label = eb.display_label(msg, bot=_FakeBot())
     assert "(untitled)" in label
+
+
+# ---------------------------------------------------------------------------
+# parse_message_link
+# ---------------------------------------------------------------------------
+
+def test_parse_message_link_valid():
+    link = "https://discord.com/channels/111/222333/444555"
+    assert eb.parse_message_link(link) == (222333, 444555)
+
+
+def test_parse_message_link_ptb():
+    link = "https://ptb.discord.com/channels/111/222333/444555"
+    assert eb.parse_message_link(link) == (222333, 444555)
+
+
+def test_parse_message_link_invalid():
+    assert eb.parse_message_link("not a link") is None
+    assert eb.parse_message_link("https://discord.com/channels/111") is None
+
+
+# ---------------------------------------------------------------------------
+# draft_from_message
+# ---------------------------------------------------------------------------
+
+class _FakeEmbed:
+    title = "Test Title"
+    description = "Body text"
+    color = type("C", (), {"value": 0xFF0000})()
+    footer = type("F", (), {"text": "Footer"})()
+    image = type("I", (), {"url": "https://example.com/img.png"})()
+
+
+class _FakeButton:
+    url = "https://example.com"
+    label = "Click me"
+
+
+class _FakeRow:
+    children = [_FakeButton()]
+
+
+class _FakeChannel2:
+    id = 999
+
+
+class _FakeMessage:
+    id = 12345
+    embeds = [_FakeEmbed()]
+    components = [_FakeRow()]
+    channel = _FakeChannel2()
+
+
+def test_draft_from_message_fields(tmp_path, monkeypatch):
+    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
+    draft = eb.draft_from_message(_FakeMessage())
+    assert draft["title"] == "Test Title"
+    assert draft["description"] == "Body text"
+    assert draft["footer"] == "Footer"
+    assert draft["image_url"] == "https://example.com/img.png"
+    assert draft["color"] == 0xFF0000
+    assert draft["button_label"] == "Click me"
+    assert draft["button_url"] == "https://example.com"
+    assert draft["message_id"] == 12345
+    assert draft["channel_id"] == 999
+
+
+def test_draft_from_message_no_button(tmp_path, monkeypatch):
+    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
+
+    class _NoButtonRow:
+        children = []
+
+    class _MsgNoBtn:
+        id = 1
+        embeds = [_FakeEmbed()]
+        components = [_NoButtonRow()]
+        channel = _FakeChannel2()
+
+    draft = eb.draft_from_message(_MsgNoBtn())
+    assert draft["button_label"] is None
+    assert draft["button_url"] is None
