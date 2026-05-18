@@ -665,6 +665,8 @@ class EmbedBuilderCog(commands.Cog):
         for msg in list(load_messages()):
             if msg["status"] != "scheduled":
                 continue
+            if not msg.get("send_at"):
+                continue
             if datetime.fromisoformat(msg["send_at"]) > now:
                 continue
             channel = self.bot.get_channel(msg["channel_id"])
@@ -764,3 +766,7 @@ async def setup(bot: commands.Bot):
         )
 
     bot.tree.add_command(edit_embed_menu)
+
+
+async def teardown(bot: commands.Bot):
+    bot.tree.remove_command("Edit Embed", type=discord.AppCommandType.message)
