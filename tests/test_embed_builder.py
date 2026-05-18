@@ -68,3 +68,137 @@ def test_delete_message(tmp_path, monkeypatch):
 def test_delete_nonexistent_is_safe(tmp_path, monkeypatch):
     monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
     eb.delete_message("does-not-exist")  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# parse_color
+# ---------------------------------------------------------------------------
+
+def test_parse_color_valid_no_hash():
+    assert eb.parse_color("9B59B6") == 0x9B59B6
+
+
+def test_parse_color_valid_with_hash():
+    assert eb.parse_color("#FF0000") == 0xFF0000
+
+
+def test_parse_color_black():
+    assert eb.parse_color("000000") == 0
+
+
+def test_parse_color_empty():
+    assert eb.parse_color("") is None
+    assert eb.parse_color("   ") is None
+
+
+def test_parse_color_invalid_chars():
+    assert eb.parse_color("ZZZZZZ") == -1
+
+
+def test_parse_color_wrong_length():
+    assert eb.parse_color("FFF") == -1
+    assert eb.parse_color("1234567") == -1
+
+
+# ---------------------------------------------------------------------------
+# parse_send_at
+# ---------------------------------------------------------------------------
+
+def test_parse_send_at_valid_future():
+    from datetime import datetime, timedelta, timezone
+    cst = timezone(timedelta(hours=8))
+    future = (datetime.now(cst) + timedelta(days=1)).strftime("%Y-%m-%d %H:%M")
+    result = eb.parse_send_at(future)
+    assert result is not None
+    assert "+08:00" in result
+
+
+def test_parse_send_at_past():
+    assert eb.parse_send_at("2000-01-01 00:00") is None
+
+
+def test_parse_send_at_invalid_format():
+    assert eb.parse_send_at("not a date") is None
+    assert eb.parse_send_at("2026/05/20 15:00") is None
+
+
+# ---------------------------------------------------------------------------
+# build_embed / build_view
+# ---------------------------------------------------------------------------
+
+def _full_msg(**overrides):
+    base = {
+        "title": "Test Title",
+        "description": "Test body",
+        "footer": "Footer text",
+        "image_url": "https://example.com/img.png",
+        "color": 0xFF0000,
+        "button_label": "Click",
+        "button_url": "https://example.com",
+    }
+    return {**base, **overrides}
+
+
+def test_build_embed_sets_all_fields():
+    embed = eb.build_embed(_full_msg())
+    assert embed.title == "Test Title"
+    assert embed.description == "Test body"
+    assert embed.color.value == 0xFF0000
+    assert embed.footer.text == "Footer text"
+    assert embed.image.url == "https://example.com/img.png"
+
+
+def test_build_embed_no_footer_or_image():
+    embed = eb.build_embed(_full_msg(footer=None, image_url=None))
+    assert embed.title == "Test Title"
+    assert embed.description == "Test body"
+
+
+def test_build_view_with_button():
+    view = eb.build_view(_full_msg())
+    assert view is not None
+    assert len(view.children) == 1
+    btn = view.children[0]
+    assert btn.url == "https://example.com"
+    assert btn.label == "Click"
+
+
+def test_build_view_no_button():
+    assert eb.build_view(_full_msg(button_label=None, button_url=None)) is None
+
+
+def test_build_view_partial_button():
+    # label without url → no button
+    assert eb.build_view(_full_msg(button_url=None)) is None
+
+
+# ---------------------------------------------------------------------------
+# display_label
+# ---------------------------------------------------------------------------
+
+class _FakeChannel:
+    name = "announcements"
+
+
+class _FakeBot:
+    def get_channel(self, _id):
+        return _FakeChannel()
+
+
+def test_display_label_uses_custom_label():
+    msg = {"label": "My Post", "channel_id": 1, "created_at": "2026-05-18T10:00:00+08:00", "title": "X"}
+    assert eb.display_label(msg, bot=None) == "My Post"
+
+
+def test_display_label_auto_with_title():
+    msg = {"label": None, "channel_id": 1, "created_at": "2026-05-18T10:00:00+08:00", "title": "Hello World"}
+    label = eb.display_label(msg, bot=_FakeBot())
+    assert "#announcements" in label
+    assert "2026-05-18" in label
+    assert "Hello World" in label
+
+
+def test_display_label_auto_no_title():
+    msg = {"label": None, "channel_id": 1, "created_at": "2026-05-18T10:00:00+08:00", "title": None}
+    label = eb.display_label(msg, bot=_FakeBot())
+    assert "(untitled)" in label
