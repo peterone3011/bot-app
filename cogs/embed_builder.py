@@ -605,10 +605,9 @@ class EmbedBuilderCog(commands.Cog):
                 continue
             try:
                 await channel.send(embed=build_embed(msg), view=build_view(msg))
+                delete_message(msg["id"])
             except Exception as e:
                 print(f"[embed_builder] Failed to send {msg['id']}: {e}")
-            finally:
-                delete_message(msg["id"])
 
     @send_loop.before_loop
     async def before_send_loop(self):
