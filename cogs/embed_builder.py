@@ -85,6 +85,10 @@ def last_used_color() -> int | None:
 # Parsing utilities
 # ---------------------------------------------------------------------------
 
+def fmt_send_time(iso: str) -> str:
+    return iso[:16].replace("T", " ")
+
+
 def parse_color(value: str) -> int | None:
     """Returns color int, None for empty input, -1 for invalid."""
     value = value.strip().lstrip("#")
@@ -143,7 +147,7 @@ def build_view(msg: dict[str, Any]) -> discord.ui.View | None:
 def build_builder_embed(msg: dict[str, Any]) -> discord.Embed:
     """Builds the builder UI embed showing current draft/scheduled/published state."""
     if msg["status"] == "scheduled" and msg.get("send_at"):
-        status = f"▶️ Scheduled · {msg['send_at'][:16].replace('T', ' ')} (UTC+8)"
+        status = f"▶️ Scheduled · {fmt_send_time(msg['send_at'])} (UTC+8)"
     elif msg["status"] == "published":
         status = "✅ Published"
     else:
@@ -374,13 +378,13 @@ class LabelModal(discord.ui.Modal, title="Update Label"):
         msg["label"] = self.value_input.value.strip() or None
         upsert_message(msg)
         await interaction.response.edit_message(
-            embed=build_builder_embed(msg), view=EditFieldsView(self.msg_id),
+            embed=build_builder_embed(msg), view=BuilderMainView(self.msg_id),
         )
 
 
 class ScheduleModal(discord.ui.Modal, title="Set Send Time"):
     time_input = discord.ui.TextInput(
-        label="Send time (Beijing time, UTC+8)",
+        label="Send time (UTC+8)",
         placeholder="YYYY-MM-DD HH:MM",
         max_length=16,
     )
@@ -393,7 +397,7 @@ class ScheduleModal(discord.ui.Modal, title="Set Send Time"):
         send_at = parse_send_at(self.time_input.value)
         if send_at is None:
             await interaction.response.send_message(
-                content="❌ Invalid or past time. Use format `YYYY-MM-DD HH:MM` (Beijing time).",
+                content="❌ Invalid or past time. Use format `YYYY-MM-DD HH:MM` (UTC+8).",
                 ephemeral=True,
             )
             return
@@ -402,7 +406,9 @@ class ScheduleModal(discord.ui.Modal, title="Set Send Time"):
         msg["send_at"] = send_at
         upsert_message(msg)
         await interaction.response.edit_message(
-            embed=build_builder_embed(msg), view=BuilderMainView(self.msg_id),
+            content=f"✅ Scheduled for **{fmt_send_time(send_at)}** (UTC+8).",
+            embed=build_builder_embed(msg),
+            view=BuilderMainView(self.msg_id),
         )
 
 
@@ -666,7 +672,7 @@ class MessageSelect(discord.ui.Select):
         emoji_map = {"scheduled": "▶️", "published": "✅", "draft": "🔴"}
         options = []
         for msg in messages[:25]:
-            send_time = msg["send_at"][:16].replace("T", " ") + " (UTC+8)" if msg.get("send_at") else None
+            send_time = fmt_send_time(msg["send_at"]) + " (UTC+8)" if msg.get("send_at") else None
             options.append(discord.SelectOption(
                 label=display_label(msg, bot)[:100],
                 value=msg["id"],
