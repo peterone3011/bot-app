@@ -36,7 +36,7 @@ async def main():
                     await ctx.author.send(f"❌ Reload failed: {e}")
 
             await bot.load_extension("cogs.roles")
-            await bot.load_extension("cogs.embed_builder")
+            await bot.load_extension("cogs.embed")
 
             @bot.event
             async def on_ready():
