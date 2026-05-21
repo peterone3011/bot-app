@@ -8,6 +8,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["@testing-library/jest-dom/vitest"],
+    alias: {
+      "server-only": path.resolve(__dirname, "__mocks__/server-only.ts"),
+    },
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, ".") },

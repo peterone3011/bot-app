@@ -1,3 +1,4 @@
+import "server-only"
 import { createClient } from "@supabase/supabase-js"
 
 const url = process.env.SUPABASE_URL
