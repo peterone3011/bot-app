@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any
 
@@ -37,6 +38,26 @@ def upsert_message(msg: dict[str, Any]) -> None:
 
 def delete_message(msg_id: str) -> None:
     get_client().table("messages").delete().eq("id", msg_id).execute()
+
+
+# ---------------------------------------------------------------------------
+# Async wrappers (run sync Supabase calls in a thread pool)
+# ---------------------------------------------------------------------------
+
+async def aload_messages() -> list[dict[str, Any]]:
+    return await asyncio.to_thread(load_messages)
+
+
+async def aget_message(msg_id: str) -> dict[str, Any] | None:
+    return await asyncio.to_thread(get_message, msg_id)
+
+
+async def aupsert_message(msg: dict[str, Any]) -> None:
+    await asyncio.to_thread(upsert_message, msg)
+
+
+async def adelete_message(msg_id: str) -> None:
+    await asyncio.to_thread(delete_message, msg_id)
 
 
 # ---------------------------------------------------------------------------
