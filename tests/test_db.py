@@ -18,6 +18,23 @@ def client(monkeypatch):
     return mock
 
 
+# --- get_client env-var fail-fast ---
+
+def test_get_client_missing_url_raises(monkeypatch):
+    monkeypatch.setattr(db_module, "_client", None)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    with pytest.raises(KeyError):
+        db_module.get_client()
+
+
+def test_get_client_missing_key_raises(monkeypatch):
+    monkeypatch.setattr(db_module, "_client", None)
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.delenv("SUPABASE_SERVICE_KEY", raising=False)
+    with pytest.raises(KeyError):
+        db_module.get_client()
+
+
 # --- load_messages ---
 
 def test_load_messages_empty(client):
@@ -35,12 +52,12 @@ def test_load_messages_returns_rows(client):
 
 def test_get_message_found(client):
     row = {"id": "abc", "title": "Test"}
-    client.table.return_value.select.return_value.eq.return_value.execute.return_value = make_response([row])
+    client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = make_response([row])
     assert db_module.get_message("abc") == row
 
 
 def test_get_message_not_found(client):
-    client.table.return_value.select.return_value.eq.return_value.execute.return_value = make_response([])
+    client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = make_response([])
     assert db_module.get_message("missing") is None
 
 

@@ -27,7 +27,7 @@ def load_messages() -> list[dict[str, Any]]:
 
 
 def get_message(msg_id: str) -> dict[str, Any] | None:
-    rows = get_client().table("messages").select("*").eq("id", msg_id).execute().data
+    rows = get_client().table("messages").select("*").eq("id", msg_id).limit(1).execute().data
     return rows[0] if rows else None
 
 
