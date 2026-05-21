@@ -1,7 +1,11 @@
-import json
+from unittest.mock import patch
 import pytest
-import cogs.embed_builder as eb
+import cogs.embed as eb
 
+
+# ---------------------------------------------------------------------------
+# new_draft
+# ---------------------------------------------------------------------------
 
 def test_new_draft_structure():
     draft = eb.new_draft(123456789)
@@ -24,56 +28,6 @@ def test_new_draft_with_label():
 def test_new_draft_with_color():
     draft = eb.new_draft(111, color=0x9B59B6)
     assert draft["color"] == 0x9B59B6
-
-
-def test_load_messages_returns_empty_when_missing(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
-    result = eb.load_messages()
-    assert result == []
-
-
-def test_upsert_inserts_new(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
-    draft = eb.new_draft(111)
-    eb.upsert_message(draft)
-    assert eb.load_messages() == [draft]
-
-
-def test_upsert_updates_existing(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
-    draft = eb.new_draft(111)
-    eb.upsert_message(draft)
-    draft["title"] = "Updated"
-    eb.upsert_message(draft)
-    messages = eb.load_messages()
-    assert len(messages) == 1
-    assert messages[0]["title"] == "Updated"
-
-
-def test_get_message(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
-    draft = eb.new_draft(222)
-    eb.upsert_message(draft)
-    found = eb.get_message(draft["id"])
-    assert found["channel_id"] == 222
-
-
-def test_get_message_missing(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
-    assert eb.get_message("nonexistent-id") is None
-
-
-def test_delete_message(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
-    draft = eb.new_draft(333)
-    eb.upsert_message(draft)
-    eb.delete_message(draft["id"])
-    assert eb.get_message(draft["id"]) is None
-
-
-def test_delete_nonexistent_is_safe(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
-    eb.delete_message("does-not-exist")  # must not raise
 
 
 # ---------------------------------------------------------------------------
@@ -174,37 +128,30 @@ def test_build_view_no_button():
 
 
 def test_build_view_partial_button():
-    # label without url → no button
     assert eb.build_view(_full_msg(button_url=None)) is None
 
 
 # ---------------------------------------------------------------------------
-# last_used_color
+# last_used_color (mocked — storage tested in test_db.py)
 # ---------------------------------------------------------------------------
 
-def test_last_used_color_no_messages(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
-    assert eb.last_used_color() is None
+def test_last_used_color_no_messages():
+    with patch("cogs.embed.load_messages", return_value=[]):
+        assert eb.last_used_color() is None
 
 
-def test_last_used_color_returns_most_recent(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
-    old = eb.new_draft(1, color=0xFF0000)
-    old["created_at"] = "2026-01-01T00:00:00+08:00"
-    new = eb.new_draft(2, color=0x00FF00)
-    new["created_at"] = "2026-06-01T00:00:00+08:00"
-    eb.upsert_message(old)
-    eb.upsert_message(new)
-    assert eb.last_used_color() == 0x00FF00
+def test_last_used_color_returns_most_recent():
+    old = {**eb.new_draft(1, color=0xFF0000), "created_at": "2026-01-01T00:00:00+08:00"}
+    new = {**eb.new_draft(2, color=0x00FF00), "created_at": "2026-06-01T00:00:00+08:00"}
+    with patch("cogs.embed.load_messages", return_value=[old, new]):
+        assert eb.last_used_color() == 0x00FF00
 
 
-def test_last_used_color_skips_uncolored(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
+def test_last_used_color_skips_uncolored():
     no_color = eb.new_draft(1)
     colored = eb.new_draft(2, color=0xABCDEF)
-    eb.upsert_message(no_color)
-    eb.upsert_message(colored)
-    assert eb.last_used_color() == 0xABCDEF
+    with patch("cogs.embed.load_messages", return_value=[no_color, colored]):
+        assert eb.last_used_color() == 0xABCDEF
 
 
 # ---------------------------------------------------------------------------
@@ -290,8 +237,7 @@ class _FakeMessage:
     channel = _FakeChannel2()
 
 
-def test_draft_from_message_fields(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
+def test_draft_from_message_fields():
     draft = eb.draft_from_message(_FakeMessage())
     assert draft["title"] == "Test Title"
     assert draft["description"] == "Body text"
@@ -304,9 +250,7 @@ def test_draft_from_message_fields(tmp_path, monkeypatch):
     assert draft["channel_id"] == 999
 
 
-def test_draft_from_message_no_button(tmp_path, monkeypatch):
-    monkeypatch.setattr(eb, "MESSAGES_FILE", tmp_path / "messages.json")
-
+def test_draft_from_message_no_button():
     class _NoButtonRow:
         children = []
 
