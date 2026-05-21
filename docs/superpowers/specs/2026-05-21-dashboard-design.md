@@ -67,7 +67,13 @@
 | key | text | 配置键（主键） |
 | value | text | 配置值 |
 
-初始数据：`roles_channel_name = "🔔roles"`
+初始数据及类型注释：
+
+| key | value 示例 | 预期类型 | 说明 |
+|-----|-----------|---------|------|
+| roles_channel_name | 🔔roles | string | 角色选择消息所在频道名称 |
+
+> 新增 key 时须在此表补充类型和说明，避免后期混乱。布尔值用 "true"/"false"，数字用字符串存储并在代码中转换。
 
 ---
 
@@ -86,6 +92,7 @@
 - Tab 切换：草稿 / 定时中 / 已发出
 - 列表展示每条消息的标题、频道、状态、时间
 - 点击进入编辑页，功能与现有斜杠命令完全一致
+- 编辑页采用左右分栏：左侧填写字段，右侧实时渲染仿 Discord Embed 样式预览卡片
 - 右上角"新建消息"按钮
 
 **站点管理页 `/dashboard/sites`**
@@ -119,7 +126,7 @@
 |---|------|---------|
 | 1 | OAuth CSRF 防护 | next-auth 自动验证 state 参数 |
 | 2 | Cookie 安全 | httpOnly Cookie，JavaScript 无法读取 |
-| 3 | 每次请求验权 | 每个 API Route 都验证 Session + Discord 身份组 |
+| 3 | 每次请求验权 | Next.js Middleware 统一拦截所有 `/dashboard` 路径，集中验证 Session + Discord 身份组，不依赖各 API Route 单独实现 |
 | 4 | 数据库密钥隔离 | Supabase 密钥仅存 Vercel 环境变量，不暴露给浏览器 |
 | 5 | SQL 注入防护 | 使用 Supabase 官方查询构造器，不拼接原始 SQL |
 | 6 | 输入校验 | 服务器端验证所有用户输入的格式和长度 |
@@ -139,7 +146,7 @@
 **不改动：**
 - 所有斜杠命令继续保留，作为备用入口
 - Bot 在 Railway 的部署方式不变
-- Railway Volume 在迁移完成确认后删除
+- Railway Volume 删除标准：Supabase 数据跑通 + Bot 全部功能验证正常后，**再保留观察 3 天**，确认无异常后方可删除，不提前操作
 
 **新增依赖：**
 - `supabase` Python 客户端（添加至 requirements.txt）
