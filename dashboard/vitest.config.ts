@@ -7,6 +7,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    setupFiles: ["@testing-library/jest-dom/vitest"],
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, ".") },
