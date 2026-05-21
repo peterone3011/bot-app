@@ -38,6 +38,19 @@ async def main():
             await bot.load_extension("cogs.roles")
             await bot.load_extension("cogs.embed")
 
+            @bot.tree.error
+            async def on_app_command_error(interaction: discord.Interaction, error: Exception):
+                import traceback
+                print(f"[app_command_error] {error}\n{traceback.format_exc()}", flush=True)
+                msg = "❌ 出错了，请稍后再试。"
+                try:
+                    if interaction.response.is_done():
+                        await interaction.followup.send(msg)
+                    else:
+                        await interaction.response.send_message(msg, ephemeral=True)
+                except Exception:
+                    pass
+
             @bot.event
             async def on_ready():
                 await bot.tree.sync()
