@@ -36,7 +36,22 @@ describe("checkAdminRole", () => {
 
   it("returns false when Discord API returns non-ok response", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false })
+    process.env.DISCORD_GUILD_ID = "GUILD_ID"
+    process.env.DISCORD_ADMIN_ROLE_ID = "ADMIN_ROLE_ID"
     const result = await checkAdminRole("bad-token")
     expect(result).toBe(false)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it("returns false when env vars are missing", async () => {
+    const savedGuild = process.env.DISCORD_GUILD_ID
+    const savedRole = process.env.DISCORD_ADMIN_ROLE_ID
+    delete process.env.DISCORD_GUILD_ID
+    delete process.env.DISCORD_ADMIN_ROLE_ID
+    const result = await checkAdminRole("any-token")
+    expect(result).toBe(false)
+    expect(mockFetch).not.toHaveBeenCalled()
+    process.env.DISCORD_GUILD_ID = savedGuild
+    process.env.DISCORD_ADMIN_ROLE_ID = savedRole
   })
 })

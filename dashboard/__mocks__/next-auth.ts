@@ -1,4 +1,6 @@
 // Mock for vitest — next-auth cannot run in jsdom (requires Next.js server runtime)
+import { vi } from "vitest"
+
 const NextAuth = (_config: unknown) => ({
   auth: vi.fn(),
   handlers: { GET: vi.fn(), POST: vi.fn() },
