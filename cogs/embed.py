@@ -1,57 +1,25 @@
 from __future__ import annotations
 
-import json
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
-
-import os
 
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-MESSAGES_FILE = Path(os.environ.get("MESSAGES_FILE", "messages.json"))
+from cogs.db import delete_message, get_message, load_messages, upsert_message
+
 CST = timezone(timedelta(hours=8))
 
 
-# ---------------------------------------------------------------------------
-# Storage
-# ---------------------------------------------------------------------------
-
-def load_messages() -> list[dict[str, Any]]:
-    try:
-        return json.loads(MESSAGES_FILE.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return []
-
-
-def save_messages(messages: list[dict[str, Any]]) -> None:
-    MESSAGES_FILE.write_text(
-        json.dumps(messages, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-
-def get_message(msg_id: str) -> dict[str, Any] | None:
-    return next((m for m in load_messages() if m["id"] == msg_id), None)
-
-
-def upsert_message(msg: dict[str, Any]) -> None:
-    messages = load_messages()
-    for i, m in enumerate(messages):
-        if m["id"] == msg["id"]:
-            messages[i] = msg
-            save_messages(messages)
-            return
-    messages.append(msg)
-    save_messages(messages)
-
-
-def delete_message(msg_id: str) -> None:
-    save_messages([m for m in load_messages() if m["id"] != msg_id])
+def last_used_color() -> int | None:
+    colored = [m for m in load_messages() if m.get("color") is not None]
+    if not colored:
+        return None
+    colored.sort(key=lambda m: m.get("created_at", ""), reverse=True)
+    return colored[0]["color"]
 
 
 def new_draft(channel_id: int, label: str | None = None, color: int | None = None) -> dict[str, Any]:
@@ -71,14 +39,6 @@ def new_draft(channel_id: int, label: str | None = None, color: int | None = Non
         "button_url": None,
         "color": color,
     }
-
-
-def last_used_color() -> int | None:
-    colored = [m for m in load_messages() if m.get("color") is not None]
-    if not colored:
-        return None
-    colored.sort(key=lambda m: m.get("created_at", ""), reverse=True)
-    return colored[0]["color"]
 
 
 # ---------------------------------------------------------------------------
