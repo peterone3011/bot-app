@@ -60,7 +60,11 @@ export function EmbedForm({ initial }: { initial: Message }) {
   async function handleDelete() {
     if (!confirm("确定删除这条消息？此操作不可恢复。")) return
     try {
-      await fetch(`/api/embeds/${msg.id}`, { method: "DELETE" })
+      const res = await fetch(`/api/embeds/${msg.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        setSaveMsg("删除失败，请重试")
+        return
+      }
       router.push("/dashboard/embeds")
       router.refresh()
     } catch {
