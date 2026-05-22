@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ChannelSelect } from "@/components/channel-select"
 
 export default function NewEmbedPage() {
   const router = useRouter()
@@ -13,20 +14,17 @@ export default function NewEmbedPage() {
   const [error, setError] = useState("")
 
   async function handleCreate() {
-    // Discord snowflake IDs are 64-bit integers; Number() has precision limits beyond 2^53.
-    // This regex validation ensures the ID is pure digits; server validates the actual format.
-    if (!channelId || !/^\d+$/.test(channelId)) {
-      setError("请输入有效的频道 ID（纯数字）")
+    if (!channelId) {
+      setError("请选择目标频道")
       return
     }
-    const id = Number(channelId)
     setLoading(true)
     setError("")
     try {
       const res = await fetch("/api/embeds", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel_id: id, label: label || null }),
+        body: JSON.stringify({ channel_id: channelId, label: label || null }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -47,16 +45,8 @@ export default function NewEmbedPage() {
       <h1 className="text-xl font-semibold">新建 Embed 消息</h1>
 
       <div className="space-y-2">
-        <Label htmlFor="channel">目标频道 ID</Label>
-        <Input
-          id="channel"
-          placeholder="例如：1234567890123456789"
-          value={channelId}
-          onChange={(e) => setChannelId(e.target.value)}
-        />
-        <p className="text-xs text-muted-foreground">
-          在 Discord 频道上右键 → 复制频道 ID（需开启开发者模式）
-        </p>
+        <Label>目标频道</Label>
+        <ChannelSelect value={channelId} onChange={setChannelId} disabled={loading} />
       </div>
 
       <div className="space-y-2">
@@ -66,16 +56,17 @@ export default function NewEmbedPage() {
           placeholder="例如：五月公告"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
+          disabled={loading}
         />
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="flex gap-2">
-        <Button onClick={handleCreate} disabled={loading}>
+        <Button onClick={handleCreate} disabled={loading || !channelId}>
           {loading ? "创建中…" : "创建并编辑"}
         </Button>
-        <Button variant="outline" onClick={() => router.back()}>
+        <Button variant="outline" onClick={() => router.back()} disabled={loading}>
           取消
         </Button>
       </div>

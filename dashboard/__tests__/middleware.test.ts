@@ -10,5 +10,6 @@ describe("middleware config", () => {
     expect(matcher.some((m) => m.includes("/api/embeds"))).toBe(true)
     expect(matcher.some((m) => m.includes("/api/sites"))).toBe(true)
     expect(matcher.some((m) => m.includes("/api/settings"))).toBe(true)
+    expect(matcher.some((m) => m.includes("/api/discord"))).toBe(true)
   })
 })

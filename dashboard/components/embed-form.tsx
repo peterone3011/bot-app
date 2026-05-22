@@ -44,6 +44,8 @@ export function EmbedForm({ initial }: { initial: Message }) {
         body: JSON.stringify(payload),
       })
       if (res.ok) {
+        const updated = await res.json()
+        setMsg(updated as Message)
         setSaveMsg("已保存")
         setTimeout(() => setSaveMsg(""), 2000)
       } else {

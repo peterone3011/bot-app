@@ -37,4 +37,12 @@ describe("rateLimitCheck", () => {
     expect(result).not.toBeNull()
     expect(result!.status).toBe(429)
   })
+
+  it("returns null (fail-open) when Redis throws", async () => {
+    mockLimit.mockRejectedValueOnce(new Error("Redis connection refused"))
+    const { rateLimitCheck } = await import("@/lib/rate-limit")
+    const mockReq = { headers: { get: () => null } } as any
+    const result = await rateLimitCheck(mockReq)
+    expect(result).toBeNull()
+  })
 })
