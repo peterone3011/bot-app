@@ -13,26 +13,33 @@ export default function NewEmbedPage() {
   const [error, setError] = useState("")
 
   async function handleCreate() {
-    const id = parseInt(channelId, 10)
-    if (!channelId || isNaN(id)) {
+    // Discord snowflake IDs are 64-bit integers; Number() has precision limits beyond 2^53.
+    // This regex validation ensures the ID is pure digits; server validates the actual format.
+    if (!channelId || !/^\d+$/.test(channelId)) {
       setError("请输入有效的频道 ID（纯数字）")
       return
     }
+    const id = Number(channelId)
     setLoading(true)
     setError("")
-    const res = await fetch("/api/embeds", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ channel_id: id, label: label || null }),
-    })
-    if (!res.ok) {
-      const data = await res.json()
-      setError(data.error ?? "创建失败")
+    try {
+      const res = await fetch("/api/embeds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel_id: id, label: label || null }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error ?? "创建失败")
+        setLoading(false)
+        return
+      }
+      const msg = await res.json()
+      router.push(`/dashboard/embeds/${msg.id}`)
+    } catch {
+      setError("网络错误，请重试")
       setLoading(false)
-      return
     }
-    const msg = await res.json()
-    router.push(`/dashboard/embeds/${msg.id}`)
   }
 
   return (
