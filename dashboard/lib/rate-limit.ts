@@ -9,10 +9,15 @@ const ratelimit = new Ratelimit({
 
 export async function rateLimitCheck(req: NextRequest): Promise<NextResponse | null> {
   const ip =
-    (req as any).ip ??
     req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+    req.headers.get("x-real-ip") ??
     "anonymous"
-  const { success } = await ratelimit.limit(ip)
+  let success = true
+  try {
+    ;({ success } = await ratelimit.limit(ip))
+  } catch (err) {
+    console.error("[rate-limit] Upstash unavailable, failing open:", err)
+  }
   if (!success) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 })
   }
