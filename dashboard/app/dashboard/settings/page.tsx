@@ -12,7 +12,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetch("/api/settings")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("fetch failed")
+        return r.json()
+      })
       .then((data) => {
         setRolesChannel(data.roles_channel_name ?? "")
         setLoading(false)
