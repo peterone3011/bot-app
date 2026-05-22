@@ -23,6 +23,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     updates.display_order = body.display_order
   }
 
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
+  }
+
   const { data, error } = await supabase
     .from("sites")
     .update(updates)
