@@ -16,7 +16,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .eq("id", params.id)
     .single()
 
-  if (error) return NextResponse.json({ error: "Not found" }, { status: 404 })
+  if (error) {
+    if (error.code === "PGRST116") return NextResponse.json({ error: "Not found" }, { status: 404 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json(data)
 }
 
@@ -27,7 +30,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const session = await auth()
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const body = await req.json()
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+  }
 
   const allowed = [
     "status", "label", "channel_id", "send_at", "message_id",
@@ -46,7 +54,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    if (error.code === "PGRST116") return NextResponse.json({ error: "Not found" }, { status: 404 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json(data)
 }
 

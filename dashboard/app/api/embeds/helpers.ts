@@ -21,7 +21,7 @@ export function validateEmbedBody(body: Record<string, unknown>): string | null 
     }
   }
   if (body.color !== undefined && body.color !== null) {
-    if (typeof body.color !== "number" || body.color < 0 || body.color > 0xFFFFFF) {
+    if (typeof body.color !== "number" || !Number.isInteger(body.color) || body.color < 0 || body.color > 0xFFFFFF) {
       return "color must be an integer between 0 and 16777215"
     }
   }
