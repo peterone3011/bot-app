@@ -2,6 +2,8 @@
 import { Suspense } from "react"
 import { signIn } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
+
+export const dynamic = "force-dynamic"
 import { Button } from "@/components/ui/button"
 
 function LoginForm() {
