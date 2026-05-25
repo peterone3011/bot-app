@@ -94,7 +94,7 @@ describe("POST /api/broadcast/bigwin", () => {
     const body = JSON.parse(options.body)
     expect(body.embeds[0].description).toContain("10,000.0 SC")
     expect(body.embeds[0].description).toContain("Fortune Dragon")
-    expect(body.embeds[0].color).toBe(0x9B59B6)
+    expect(body.embeds[0].color).toBe(0xff9933)
     expect(body.components[0].components[0].url).toBe("https://fortunepurple.com")
     expect(body.components[0].components[0].label).toBe("Play Now")
   })

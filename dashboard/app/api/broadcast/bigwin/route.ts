@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   const discordBody = {
     embeds: [{
       description: `🏆 **BIG WIN ALERT!!**\n\nA Fortune Chasers just won **${amount} SC** on **${game}**!\nThink you're next? Jump in and spin! 🎰💜`,
-      color: 0x9B59B6,
+      color: 0xff9933,
     }],
     components: [{
       type: 1,
