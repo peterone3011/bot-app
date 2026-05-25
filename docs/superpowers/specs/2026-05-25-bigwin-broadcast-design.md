@@ -34,7 +34,6 @@ Content-Type: application/json
 ```json
 {
   "amount": "10,000",
-  "currency": "SC",
   "game": "Fortune Dragon",
   "raw_amount": 10000
 }
@@ -43,16 +42,16 @@ Content-Type: application/json
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `amount` | string | 格式化后的金额字符串，直接填入文案 |
-| `currency` | string | `"SC"` 播报，`"GC"` 跳过，其他同样跳过 |
 | `game` | string | 游戏名称 |
 | `raw_amount` | number | 纯数字金额，用于门槛比较 |
+
+> **货币说明：** 此接口仅供 SC 赢局使用。技术团队负责在他们系统内过滤，GC 赢局不发送到此接口。我们不做货币字段判断，避免内部字段名不一致导致的问题。消息中货币固定显示为 `SC`。
 
 ### 响应
 
 | 状态码 | 含义 |
 |--------|------|
 | `200 { ok: true }` | 播报已发送 |
-| `200 { skipped: true, reason: "currency" }` | 货币不是 SC，跳过 |
 | `200 { skipped: true, reason: "below_threshold" }` | 未达门槛，跳过 |
 | `400` | 缺少必填字段 |
 | `401` | API 密钥无效 |
@@ -65,7 +64,6 @@ Content-Type: application/json
 ```
 收到请求
   → 验证 Authorization header（Bearer token）
-  → currency !== "SC" → 返回 skipped: currency
   → raw_amount < BIGWIN_THRESHOLD → 返回 skipped: below_threshold
   → 用 Bot Token 调用 Discord API 发消息
   → 返回 ok: true
@@ -131,4 +129,4 @@ Think you're next? Jump in and spin! 🎰💜
 **接口地址：** `https://fortunepurplebot.vercel.app/api/broadcast/bigwin`  
 **方法：** POST  
 **鉴权：** `Authorization: Bearer <密钥>`（密钥由我方提供）  
-**建议：** 只发 raw_amount ≥ 500（或商定值）的赢局，GC 货币无需发送  
+**要求：** 此接口仅供 SC 赢局调用，GC 赢局请勿发送。建议只发 raw_amount ≥ 500（或与我方商定的值）的赢局，低于此值我方会跳过不播报。  
