@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 
 function LoginForm() {
   const params = useSearchParams()
-  const error = params.get("error")
+  const error = params?.get("error")
 
   return (
     <div className="w-full max-w-sm space-y-6 rounded-xl border border-border bg-card p-8 shadow-lg">

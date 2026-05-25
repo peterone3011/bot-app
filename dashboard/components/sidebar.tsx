@@ -38,7 +38,7 @@ export function Sidebar() {
             title={item.label}
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-md text-xs font-medium transition-colors",
-              pathname.startsWith(item.href)
+              pathname?.startsWith(item.href)
                 ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
             )}
@@ -75,7 +75,7 @@ export function Sidebar() {
             href={item.href}
             className={cn(
               "block rounded-md px-3 py-2 text-sm transition-colors",
-              pathname.startsWith(item.href)
+              pathname?.startsWith(item.href)
                 ? "bg-accent text-accent-foreground font-medium"
                 : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
             )}

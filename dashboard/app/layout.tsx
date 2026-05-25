@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { SessionProviderWrapper } from "@/components/session-provider"
 import "./globals.css"
 
+export const dynamic = "force-dynamic"
 export const metadata: Metadata = { title: "Fortune Purple Dashboard" }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
