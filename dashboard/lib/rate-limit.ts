@@ -2,10 +2,19 @@ import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
 import { type NextRequest, NextResponse } from "next/server"
 
-const ratelimit = new Ratelimit({
-  redis: Redis.fromEnv(),
-  limiter: Ratelimit.slidingWindow(30, "1 m"),
-})
+// Lazy-initialize so Redis.fromEnv() is not called at module load time.
+// This prevents build failures when env vars are missing or malformed.
+let _ratelimit: Ratelimit | null = null
+
+function getRatelimit(): Ratelimit {
+  if (!_ratelimit) {
+    _ratelimit = new Ratelimit({
+      redis: Redis.fromEnv(),
+      limiter: Ratelimit.slidingWindow(30, "1 m"),
+    })
+  }
+  return _ratelimit
+}
 
 export async function rateLimitCheck(req: NextRequest): Promise<NextResponse | null> {
   const ip =
@@ -14,7 +23,7 @@ export async function rateLimitCheck(req: NextRequest): Promise<NextResponse | n
     "anonymous"
   let success = true
   try {
-    ;({ success } = await ratelimit.limit(ip))
+    ;({ success } = await getRatelimit().limit(ip))
   } catch (err) {
     console.error("[rate-limit] Upstash unavailable, failing open:", err)
   }
