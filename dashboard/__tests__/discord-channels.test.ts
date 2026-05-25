@@ -58,7 +58,7 @@ describe("GET /api/discord/channels", () => {
   it("returns 502 when Discord API responds with error status", async () => {
     const { auth } = await import("@/lib/auth")
     vi.mocked(auth).mockResolvedValueOnce({ user: { name: "admin" } } as any)
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 401 })
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 401, text: () => Promise.resolve("Unauthorized") })
     const { GET } = await import("@/app/api/discord/channels/route")
     const res = await GET()
     expect(res.status).toBe(502)
