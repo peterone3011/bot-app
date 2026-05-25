@@ -10,14 +10,14 @@ export function EmbedPreview({ msg }: { msg: Partial<Message> }) {
 
   return (
     <div
-      className="rounded-md bg-[#2b2d31] p-3 max-w-md"
+      className="rounded-md bg-[#2b2d31] p-3 w-full overflow-hidden"
       style={{ borderLeft: `4px solid ${borderColor}` }}
     >
       {msg.title && (
-        <p className="font-semibold text-white text-sm mb-1">{msg.title}</p>
+        <p className="font-semibold text-white text-sm mb-1 break-words">{msg.title}</p>
       )}
       {msg.description && (
-        <p className="text-[#dbdee1] text-sm whitespace-pre-wrap">{msg.description}</p>
+        <p className="text-[#dbdee1] text-sm whitespace-pre-wrap break-words">{msg.description}</p>
       )}
       {msg.image_url && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -28,7 +28,7 @@ export function EmbedPreview({ msg }: { msg: Partial<Message> }) {
         />
       )}
       {msg.footer && (
-        <p className="mt-2 text-xs text-[#949ba4]">{msg.footer}</p>
+        <p className="mt-2 text-xs text-[#949ba4] break-words">{msg.footer}</p>
       )}
       {msg.button_label && msg.button_url && (
         <div className="mt-3">
@@ -36,7 +36,7 @@ export function EmbedPreview({ msg }: { msg: Partial<Message> }) {
             href={msg.button_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block rounded bg-[#5865f2] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#4752c4] transition-colors"
+            className="inline-block rounded bg-[#5865f2] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#4752c4] transition-colors break-words"
           >
             {msg.button_label}
           </a>

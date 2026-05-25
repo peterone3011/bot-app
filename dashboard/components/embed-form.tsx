@@ -24,6 +24,7 @@ export function EmbedForm({ initial }: { initial: Message }) {
   const [msg, setMsg] = useState<Message>(initial)
   const [colorHex, setColorHex] = useState(intToHex(initial.color))
   const [saving, setSaving] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const [saveMsg, setSaveMsg] = useState("")
   const [scheduleAt, setScheduleAt] = useState(
     initial.send_at ? initial.send_at.slice(0, 16).replace("T", " ") : ""
@@ -33,7 +34,29 @@ export function EmbedForm({ initial }: { initial: Message }) {
     setMsg((prev) => ({ ...prev, [field]: value }))
   }
 
+  function validate(): string | null {
+    if (colorHex && !/^#[0-9a-fA-F]{6}$/.test(colorHex)) {
+      return "颜色格式无效，请填写 #RRGGBB 格式（如 #9B59B6）"
+    }
+    const hasLabel = !!msg.button_label?.trim()
+    const hasUrl = !!msg.button_url?.trim()
+    if (hasLabel && !hasUrl) return "填写了按钮文字，请同时填写按钮链接"
+    if (hasUrl && !hasLabel) return "填写了按钮链接，请同时填写按钮文字"
+    if (msg.button_url && !/^https?:\/\/.+/.test(msg.button_url)) {
+      return "按钮链接必须以 http:// 或 https:// 开头"
+    }
+    if (msg.image_url && !/^https?:\/\/.+/.test(msg.image_url)) {
+      return "图片链接必须以 http:// 或 https:// 开头"
+    }
+    return null
+  }
+
   async function save(extraFields?: Partial<Message>) {
+    const validationError = validate()
+    if (validationError) {
+      setSaveMsg(validationError)
+      return
+    }
     setSaving(true)
     setSaveMsg("")
     const payload = { ...msg, ...extraFields }
@@ -44,10 +67,8 @@ export function EmbedForm({ initial }: { initial: Message }) {
         body: JSON.stringify(payload),
       })
       if (res.ok) {
-        const updated = await res.json()
-        setMsg(updated as Message)
-        setSaveMsg("已保存")
-        setTimeout(() => setSaveMsg(""), 2000)
+        router.push("/dashboard/embeds")
+        router.refresh()
       } else {
         const d = await res.json()
         setSaveMsg(`错误：${d.error}`)
@@ -56,6 +77,33 @@ export function EmbedForm({ initial }: { initial: Message }) {
       setSaveMsg("网络错误，请重试")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handlePublish() {
+    const validationError = validate()
+    if (validationError) { setSaveMsg(validationError); return }
+    if (!confirm("确定立即发布到 Discord？")) return
+    setPublishing(true)
+    setSaveMsg("")
+    try {
+      await fetch(`/api/embeds/${msg.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(msg),
+      })
+      const res = await fetch(`/api/embeds/${msg.id}/publish`, { method: "POST" })
+      if (res.ok) {
+        router.push("/dashboard/embeds")
+        router.refresh()
+      } else {
+        const d = await res.json()
+        setSaveMsg(`发布失败：${d.error}${d.detail ? `（${d.detail}）` : ""}`)
+      }
+    } catch {
+      setSaveMsg("网络错误，请重试")
+    } finally {
+      setPublishing(false)
     }
   }
 
@@ -88,15 +136,23 @@ export function EmbedForm({ initial }: { initial: Message }) {
   }
 
   return (
-    <div className="flex gap-8">
+    <div className="flex gap-10 items-start">
       {/* Left: form */}
-      <div className="flex-1 space-y-4 max-w-lg">
+      <div className="flex-1 min-w-0 space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">编辑 Embed</h1>
+          <div className="flex items-center gap-3">
+            <Button size="sm" variant="outline" onClick={() => router.push("/dashboard/embeds")}>
+              返回
+            </Button>
+            <h1 className="text-xl font-semibold">编辑 Embed</h1>
+          </div>
           <div className="flex gap-2 items-center">
-            {saveMsg && <span className="text-sm">{saveMsg}</span>}
-            <Button size="sm" onClick={() => save()} disabled={saving}>
-              {saving ? "保存中…" : "保存"}
+            {saveMsg && <span className="text-sm text-destructive">{saveMsg}</span>}
+            <Button size="sm" variant="outline" onClick={() => save()} disabled={saving}>
+              {saving ? "保存中…" : "保存草稿"}
+            </Button>
+            <Button size="sm" onClick={handlePublish} disabled={saving || publishing}>
+              {publishing ? "发布中…" : "立即发布"}
             </Button>
             <Button size="sm" variant="destructive" onClick={handleDelete}>
               删除
@@ -141,23 +197,39 @@ export function EmbedForm({ initial }: { initial: Message }) {
         </div>
 
         <div className="space-y-2">
-          <Label>颜色（Hex）</Label>
+          <Label>颜色</Label>
           <div className="flex gap-2 items-center">
-            <Input
-              value={colorHex}
+            <div className="flex items-center rounded-md border border-input bg-background px-3 text-sm focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+              <span className="text-muted-foreground select-none">#</span>
+              <input
+                value={colorHex.replace("#", "")}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^0-9a-fA-F]/g, "").slice(0, 6)
+                  const full = "#" + raw
+                  setColorHex(full)
+                  const parsed = hexToInt(full)
+                  if (parsed !== null) update("color", parsed)
+                }}
+                placeholder="9B59B6"
+                maxLength={6}
+                className="w-24 bg-transparent py-2 outline-none font-mono"
+              />
+            </div>
+            <input
+              type="color"
+              value={/^#[0-9a-fA-F]{6}$/.test(colorHex) ? colorHex : "#000000"}
               onChange={(e) => {
                 setColorHex(e.target.value)
                 const parsed = hexToInt(e.target.value)
                 if (parsed !== null) update("color", parsed)
               }}
-              placeholder="#9B59B6"
-              maxLength={7}
-              className="w-36"
+              className="h-9 w-9 cursor-pointer rounded-md border border-input p-0.5 bg-background"
+              title="调色板"
             />
-            {colorHex && /^#[0-9a-fA-F]{6}$/.test(colorHex) && (
-              <div className="h-6 w-6 rounded border" style={{ backgroundColor: colorHex }} />
-            )}
           </div>
+          {colorHex.replace("#", "").length > 0 && !/^#[0-9a-fA-F]{6}$/.test(colorHex) && (
+            <p className="text-xs text-destructive">请填写完整的 6 位十六进制颜色</p>
+          )}
         </div>
 
         {/* Schedule section */}
@@ -197,9 +269,12 @@ export function EmbedForm({ initial }: { initial: Message }) {
       </div>
 
       {/* Right: preview */}
-      <div className="w-80 shrink-0">
-        <p className="mb-3 text-sm font-medium text-muted-foreground">预览</p>
-        <EmbedPreview msg={msg} />
+      <div className="w-72 shrink-0 sticky top-0">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Discord 预览</p>
+        <div className="rounded-lg border border-border bg-muted/30 p-3">
+          <EmbedPreview msg={msg} />
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">内容实时同步</p>
       </div>
     </div>
   )

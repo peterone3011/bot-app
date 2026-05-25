@@ -27,7 +27,9 @@ export async function GET() {
   }
 
   if (!res.ok) {
-    return NextResponse.json({ error: "Discord API error" }, { status: 502 })
+    const body = await res.text()
+    console.error("Discord API error", res.status, body)
+    return NextResponse.json({ error: "Discord API error", detail: body }, { status: 502 })
   }
 
   const all = await res.json()
