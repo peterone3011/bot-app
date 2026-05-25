@@ -2,8 +2,8 @@ export function validateEmbedBody(body: Record<string, unknown>): string | null 
   if (body.channel_id === undefined || body.channel_id === null) {
     return "channel_id is required"
   }
-  if (typeof body.channel_id !== "number" || !Number.isInteger(body.channel_id)) {
-    return "channel_id must be an integer"
+  if (typeof body.channel_id !== "string" || !/^\d+$/.test(body.channel_id)) {
+    return "channel_id must be a numeric string (Discord snowflake)"
   }
   if (body.title !== undefined && body.title !== null) {
     if (typeof body.title !== "string" || body.title.length > 256) {

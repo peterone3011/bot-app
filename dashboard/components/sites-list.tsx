@@ -86,17 +86,13 @@ export function SitesList({ initialSites }: { initialSites: Site[] }) {
     const prevSites = sites
     const reordered = arrayMove(sites, oldIndex, newIndex)
     setSites(reordered)
-    Promise.all(
-      reordered.map((site, index) =>
-        fetch(`/api/sites/${site.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ display_order: index }),
-        }).then((res) => {
-          if (!res.ok) throw new Error(`Failed to update ${site.id}`)
-        })
-      )
-    ).catch(() => {
+    fetch("/api/sites", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reordered.map((site, index) => ({ id: site.id, display_order: index }))),
+    }).then((res) => {
+      if (!res.ok) throw new Error("reorder failed")
+    }).catch(() => {
       setSites(prevSites)
       setMsg("排序保存失败，已还原")
       setTimeout(() => setMsg(""), 3000)

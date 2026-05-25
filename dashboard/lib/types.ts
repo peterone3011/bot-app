@@ -3,7 +3,7 @@ export interface Message {
   status: "draft" | "scheduled" | "published"
   label: string | null
   created_at: string
-  channel_id: number
+  channel_id: string
   send_at: string | null
   message_id: number | null
   title: string | null
