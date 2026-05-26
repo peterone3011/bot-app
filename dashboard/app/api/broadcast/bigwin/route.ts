@@ -26,6 +26,13 @@ export async function POST(req: NextRequest) {
   if (!amount || !game) {
     return NextResponse.json({ error: "Missing required fields: amount, game" }, { status: 400 })
   }
+  // C2: validate format — prevent @everyone/@here injection and cap length
+  if (typeof amount !== "string" || !/^[\d,. ]+$/.test(amount) || amount.length > 30) {
+    return NextResponse.json({ error: "Invalid amount format" }, { status: 400 })
+  }
+  if (typeof game !== "string" || game.length > 100 || /^@/.test(game.trim())) {
+    return NextResponse.json({ error: "Invalid game format" }, { status: 400 })
+  }
 
   // 3. Cooldown check (fail-open if Redis unavailable)
   const redis = Redis.fromEnv()
@@ -42,10 +49,14 @@ export async function POST(req: NextRequest) {
   // 4. Read image URLs from config table, pick one randomly
   let imageUrl: string | null = null
   try {
-    const { data: configRows } = await supabase
+    const { data: configRows, error: configError } = await supabase
       .from("config")
       .select("key, value")
       .in("key", ["bigwin_image_1", "bigwin_image_2"])
+    // C1: log Supabase errors (they don't throw, they return error in the result)
+    if (configError) {
+      console.error("[bigwin] Supabase config read error:", configError.message)
+    }
     const images = (configRows ?? [])
       .map((r: { key: string; value: string }) => r.value)
       .filter(Boolean)

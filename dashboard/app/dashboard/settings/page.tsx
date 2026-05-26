@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [msg, setMsg] = useState("")
+  const msgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     fetch("/api/settings")
@@ -39,12 +40,16 @@ export default function SettingsPage() {
       })
   }, [])
 
+  // C3: cancel previous timer before setting new one, so rapid saves don't cross-fire
   function showMsg(text: string) {
+    if (msgTimerRef.current) clearTimeout(msgTimerRef.current)
     setMsg(text)
-    setTimeout(() => setMsg(""), 2500)
+    msgTimerRef.current = setTimeout(() => setMsg(""), 2500)
   }
 
   async function handleSaveRoles() {
+    if (saving !== null) return // C5: block concurrent saves
+    setMsg("") // C6: clear stale message before request
     setSaving("roles")
     const ok = await saveSetting("roles_channel_name", rolesChannel).catch(() => false)
     showMsg(ok ? "✅ 已保存" : "❌ 保存失败")
@@ -52,6 +57,8 @@ export default function SettingsPage() {
   }
 
   async function handleSaveImages() {
+    if (saving !== null) return // C5: block concurrent saves
+    setMsg("") // C6: clear stale message before request
     setSaving("images")
     const [ok1, ok2] = await Promise.all([
       saveSetting("bigwin_image_1", bigwinImage1).catch(() => false),
