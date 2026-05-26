@@ -18,20 +18,33 @@ export async function POST(req: NextRequest) {
   let amount: string, game: string
   try {
     const body = await req.json()
-    amount = body.amount
-    game = body.game
+    // Accept amount as string ("15,888.00") or number (15888.00)
+    const rawAmount = body.amount
+    const rawGame = body.game
+    if (rawAmount === undefined || rawAmount === null) {
+      return NextResponse.json({ error: "Missing required field: amount" }, { status: 400 })
+    }
+    if (!rawGame || typeof rawGame !== "string") {
+      return NextResponse.json({ error: "Missing required field: game (must be a string)" }, { status: 400 })
+    }
+    // Normalise amount to string
+    if (typeof rawAmount === "number") {
+      amount = rawAmount.toLocaleString("en-US")
+    } else if (typeof rawAmount === "string") {
+      amount = rawAmount.trim()
+    } else {
+      return NextResponse.json({ error: "Invalid amount: must be a number or string" }, { status: 400 })
+    }
+    game = rawGame.trim()
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
-  if (!amount || !game) {
-    return NextResponse.json({ error: "Missing required fields: amount, game" }, { status: 400 })
-  }
   // C2: validate format — prevent @everyone/@here injection and cap length
-  if (typeof amount !== "string" || !/^[\d,. ]+$/.test(amount) || amount.length > 30) {
-    return NextResponse.json({ error: "Invalid amount format" }, { status: 400 })
+  if (!/^[\d,. ]+$/.test(amount) || amount.length === 0 || amount.length > 30) {
+    return NextResponse.json({ error: "Invalid amount format (digits, commas, dots only, max 30 chars)" }, { status: 400 })
   }
-  if (typeof game !== "string" || game.length > 100 || /^@/.test(game.trim())) {
-    return NextResponse.json({ error: "Invalid game format" }, { status: 400 })
+  if (game.length > 100 || /^@/.test(game)) {
+    return NextResponse.json({ error: "Invalid game format (max 100 chars, must not start with @)" }, { status: 400 })
   }
 
   // 3. Cooldown check (fail-open if Redis unavailable)
