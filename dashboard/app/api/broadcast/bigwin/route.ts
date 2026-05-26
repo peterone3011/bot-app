@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Redis } from "@upstash/redis"
+import { supabase } from "@/lib/supabase"
 
 const COOLDOWN_KEY = "bigwin:cooldown"
 const COOLDOWN_SECONDS = 14400 // 4 hours
@@ -38,7 +39,24 @@ export async function POST(req: NextRequest) {
     console.error("[bigwin] Redis error during cooldown check:", err)
   }
 
-  // 4. Check required env vars
+  // 4. Read image URLs from config table, pick one randomly
+  let imageUrl: string | null = null
+  try {
+    const { data: configRows } = await supabase
+      .from("config")
+      .select("key, value")
+      .in("key", ["bigwin_image_1", "bigwin_image_2"])
+    const images = (configRows ?? [])
+      .map((r: { key: string; value: string }) => r.value)
+      .filter(Boolean)
+    if (images.length > 0) {
+      imageUrl = images[Math.floor(Math.random() * images.length)]
+    }
+  } catch (err) {
+    console.error("[bigwin] Failed to read image config:", err)
+  }
+
+  // 5. Check required env vars
   const botToken = process.env.DISCORD_BOT_TOKEN
   const channelId = process.env.BIGWIN_CHANNEL_ID
   const buttonUrl = process.env.BIGWIN_BUTTON_URL
@@ -47,12 +65,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Server misconfigured" }, { status: 503 })
   }
 
-  // 5. Send to Discord
+  // 6. Send to Discord
+  const embed: Record<string, unknown> = {
+    description: `🏆 **BIG WIN ALERT!!**\n\nA Fortune Chasers just won **${amount} SC** on **${game}**!\nThink you're next? Jump in and spin! 🎰💜`,
+    color: 0xff9933,
+  }
+  if (imageUrl) embed.image = { url: imageUrl }
+
   const discordBody = {
-    embeds: [{
-      description: `🏆 **BIG WIN ALERT!!**\n\nA Fortune Chasers just won **${amount} SC** on **${game}**!\nThink you're next? Jump in and spin! 🎰💜`,
-      color: 0xff9933,
-    }],
+    embeds: [embed],
     components: [{
       type: 1,
       components: [{
@@ -88,7 +109,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Discord API error", detail }, { status: 502 })
   }
 
-  // 6. Write cooldown AFTER successful send only
+  // 7. Write cooldown AFTER successful send only
   try {
     await redis.set(COOLDOWN_KEY, "1", { ex: COOLDOWN_SECONDS })
   } catch (err) {
