@@ -12,6 +12,8 @@ try:
 except ValueError:
     JACKPOT_CHANNEL_ID = 0
 
+BUTTON_URL: str = os.getenv("BIGWIN_BUTTON_URL", "")
+
 _UTC = datetime.timezone.utc
 
 # 每天北京时间 19:00 = UTC 11:00
@@ -67,8 +69,17 @@ class JackpotCog(commands.Cog):
         )
         embed.set_image(url=image_url)
 
+        view: Optional[discord.ui.View] = None
+        if BUTTON_URL:
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(
+                label="Play Now",
+                url=BUTTON_URL,
+                style=discord.ButtonStyle.link,
+            ))
+
         try:
-            await channel.send(embed=embed)
+            await channel.send(embed=embed, view=view)
             self._last_sent_date = today
             self._image_index += 1  # 仅发送成功后才推进，保持交替正确
             print(f"[jackpot][{source}] Broadcast sent: {amount} ({image_url})", flush=True)
