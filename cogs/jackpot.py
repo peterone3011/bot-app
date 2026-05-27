@@ -18,8 +18,8 @@ _UTC = datetime.timezone.utc
 BROADCAST_TIME = datetime.time(hour=11, minute=0, tzinfo=_UTC)
 
 IMAGE_URLS = [
-    "https://fortunepurplebot.vercel.app/bigwins1.jpg",
-    "https://fortunepurplebot.vercel.app/bigwins2.jpg",
+    "https://fortunepurplebot.vercel.app/jackpot1.png",
+    "https://fortunepurplebot.vercel.app/jackpot2.png",
 ]
 
 
