@@ -1,51 +1,60 @@
 import discord
 from discord.ext import commands
 
-from cogs.db import get_config, load_sites
+from cogs.db import get_config
 
-EMBED_TITLE = "Select Your Site"
+EMBED_TITLE = "Select Your Notifications"
+EMBED_DESCRIPTION = (
+    "Subscribe to the channels you want to follow.\n"
+    "Click once to **subscribe** — click again to **unsubscribe**."
+)
+
+SUBSCRIPTION_ROLES = [
+    discord.SelectOption(
+        label="📢 Exclusive Updates",
+        value="📢 Exclusive Updates",
+        description="Access our exclusive updates channel",
+    ),
+    discord.SelectOption(
+        label="🎰Gaming Alerts",
+        value="🎰Gaming Alerts",
+        description="Get notified for jackpots and big wins",
+    ),
+]
 
 
 async def handle_role(interaction: discord.Interaction, selected: str) -> None:
     member = interaction.user
-    guild = interaction.guild
-    sites = load_sites()
+    guild  = interaction.guild
 
     role = discord.utils.get(guild.roles, name=selected)
     if not role:
-        await interaction.followup.send(content="⚠️ No role found for this site.", ephemeral=True)
+        await interaction.followup.send(
+            content=f"⚠️ Role **{selected}** not found. Please contact an admin.",
+            ephemeral=True,
+        )
         return
-
-    roles_to_remove = []
-    for site in sites:
-        if site == selected:
-            continue
-        r = discord.utils.get(guild.roles, name=site)
-        if r and r in member.roles:
-            roles_to_remove.append(r)
-
-    if roles_to_remove:
-        await member.remove_roles(*roles_to_remove)
 
     if role in member.roles:
         await member.remove_roles(role)
-        await interaction.followup.send(content=f"✅ Role removed: **{selected}**", ephemeral=True)
+        await interaction.followup.send(
+            content=f"✅ Unsubscribed from **{selected}**.", ephemeral=True
+        )
     else:
         await member.add_roles(role)
         await interaction.followup.send(
-            content=f"✅ Role assigned: **{selected}**. Welcome!", ephemeral=True
+            content=f"✅ Subscribed to **{selected}**!", ephemeral=True
         )
 
 
-class SiteSelect(discord.ui.Select):
-    def __init__(self, sites: list[str], placeholder: str, custom_id: str):
-        options = [discord.SelectOption(label=s, value=s) for s in sites]
+class SubscriptionSelect(discord.ui.Select):
+    def __init__(self) -> None:
         super().__init__(
-            placeholder=placeholder,
+            placeholder="Subscribe / unsubscribe to notifications...",
             min_values=1,
             max_values=1,
-            options=options,
-            custom_id=custom_id,
+            options=SUBSCRIPTION_ROLES,
+            custom_id="subscription_role_select",
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -54,40 +63,40 @@ class SiteSelect(discord.ui.Select):
 
 
 class RoleView(discord.ui.View):
-    def __init__(self, sites: list[str]):
+    def __init__(self) -> None:
         super().__init__(timeout=None)
-        self.add_item(SiteSelect(sites[:25], "Select site (1-25)...", "site_role_select_1"))
-        self.add_item(SiteSelect(sites[25:], "Select site (26-50)...", "site_role_select_2"))
+        self.add_item(SubscriptionSelect())
 
 
 class RolesCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        bot.add_view(RoleView(load_sites()))
+        bot.add_view(RoleView())
 
     async def _post_role_embeds(self) -> None:
         channel_name = get_config("roles_channel_name", "🔔roles")
-        sites = load_sites()
         for guild in self.bot.guilds:
             channel = discord.utils.get(guild.text_channels, name=channel_name)
             if not channel:
                 continue
-            already_posted = False
+            # Find any existing bot embed and update it; post fresh if none found
+            existing: discord.Message | None = None
             async for msg in channel.history(limit=50):
                 if msg.author == self.bot.user and msg.embeds:
-                    if msg.embeds[0].title in (EMBED_TITLE, "选择你的站点"):
-                        already_posted = True
-                        break
-            if not already_posted:
-                try:
-                    embed = discord.Embed(
-                        title=EMBED_TITLE,
-                        description="Please select your site from the menu below. The bot will automatically assign you the corresponding role.",
-                        color=0x9B59B6,
-                    )
-                    await channel.send(embed=embed, view=RoleView(sites))
-                except Exception as e:
-                    print(f"Failed to post role embed: {e}")
+                    existing = msg
+                    break
+            embed = discord.Embed(
+                title=EMBED_TITLE,
+                description=EMBED_DESCRIPTION,
+                color=0x9B59B6,
+            )
+            try:
+                if existing:
+                    await existing.edit(embed=embed, view=RoleView())
+                else:
+                    await channel.send(embed=embed, view=RoleView())
+            except Exception as e:
+                print(f"[roles] Failed to post/update role embed: {e}")
 
     async def cog_load(self) -> None:
         if self.bot.is_ready():
