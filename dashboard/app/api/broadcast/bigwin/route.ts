@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { Redis } from "@upstash/redis"
 import { supabase } from "@/lib/supabase"
 
+export const dynamic = "force-dynamic"
+
 const COOLDOWN_KEY = "bigwin:cooldown"
 const COOLDOWN_SECONDS = 14400 // 4 hours
 
