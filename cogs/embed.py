@@ -682,7 +682,15 @@ class EmbedBuilderCog(commands.Cog):
                 continue
             if not msg.get("send_at"):
                 continue
-            if datetime.fromisoformat(msg["send_at"]) > now:
+            try:
+                send_at_dt = datetime.fromisoformat(msg["send_at"])
+                # Supabase 偶尔返回 naive datetime（无时区），当作 UTC 处理
+                if send_at_dt.tzinfo is None:
+                    send_at_dt = send_at_dt.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                print(f"[embed_builder] Invalid send_at for {msg['id']}: {msg['send_at']!r}")
+                continue
+            if send_at_dt > now:
                 continue
             channel = self.bot.get_channel(msg["channel_id"])
             if channel is None:
@@ -691,11 +699,17 @@ class EmbedBuilderCog(commands.Cog):
                 continue
             try:
                 sent = await channel.send(embed=build_embed(msg), view=build_view(msg))
-                msg["status"] = "published"
-                msg["message_id"] = sent.id
-                await aupsert_message(msg)
             except Exception as e:
                 print(f"[embed_builder] Failed to send {msg['id']}: {e}")
+                continue
+
+            msg["status"] = "published"
+            msg["message_id"] = sent.id
+            try:
+                await aupsert_message(msg)
+            except Exception as e:
+                # 消息已发出但 DB 未更新，下次循环可能重复发送，需人工检查
+                print(f"[embed_builder] Sent OK but DB update failed for {msg['id']}: {e}")
 
     @send_loop.before_loop
     async def before_send_loop(self):
