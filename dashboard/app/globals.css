@@ -1,65 +1,229 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ──────────────────────────────────────────────────────────────────
+   Fortune Purple — design tokens
+   App is force-dark; we still ship a light fallback for safety.
+   Brand: muted violet around #9B59B6 (≈ hsl 283 39% 53%).
+   ────────────────────────────────────────────────────────────────── */
+
 @layer base {
   :root {
+    /* Light fallback (rarely used — html is force-dark) */
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 230 25% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 230 25% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --popover-foreground: 230 25% 12%;
+    --primary: 283 39% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 230 20% 96%;
+    --secondary-foreground: 230 25% 12%;
+    --muted: 230 20% 96%;
+    --muted-foreground: 230 10% 45%;
+    --accent: 283 39% 95%;
+    --accent-foreground: 283 39% 30%;
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 230 20% 90%;
+    --input: 230 20% 90%;
+    --ring: 283 39% 53%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    /* Base surfaces — deep navy-charcoal with slight cool tone */
+    --background: 230 25% 6%;          /* page */
+    --foreground: 230 15% 92%;
+
+    --card: 230 22% 9%;                /* raised card */
+    --card-foreground: 230 15% 92%;
+
+    --popover: 230 25% 8%;
+    --popover-foreground: 230 15% 92%;
+
+    /* Brand violet — Discord role color #9B59B6 family, slightly tuned */
+    --primary: 270 47% 60%;            /* primary actions */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 230 18% 14%;          /* subtle filled */
+    --secondary-foreground: 230 15% 92%;
+
+    --muted: 230 18% 12%;
+    --muted-foreground: 230 8% 62%;
+
+    --accent: 270 30% 18%;             /* violet-tinted accent for hover */
+    --accent-foreground: 270 30% 92%;
+
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 230 18% 16%;             /* hairline */
+    --input: 230 18% 16%;
+    --ring: 270 47% 60%;
+
+    /* Extra tokens not in shadcn defaults */
+    --brand-50:  270 45% 95%;
+    --brand-100: 270 45% 88%;
+    --brand-300: 270 45% 70%;
+    --brand-500: 270 47% 60%;          /* same as primary */
+    --brand-600: 270 47% 50%;
+    --brand-700: 270 47% 40%;
+
+    --success: 145 50% 45%;
+    --warning: 35 85% 55%;
+
+    --glow-violet: 270 47% 60%;
   }
 }
 
+/* ──────────────────────────────────────────────────────────────────
+   Base layer
+   ────────────────────────────────────────────────────────────────── */
 @layer base {
-  * {
-    @apply border-border;
+  * { @apply border-border; }
+
+  html {
+    font-family:
+      'Inter', 'Noto Sans SC',
+      ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
+
   body {
     @apply bg-background text-foreground;
+    /* Subtle ambient violet glow — top-left only, very low intensity */
+    background-image:
+      radial-gradient(900px 500px at -10% -20%, hsl(270 47% 60% / 0.08), transparent 60%),
+      radial-gradient(700px 400px at 110% 0%,   hsl(270 47% 60% / 0.04), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.35);
+    color: hsl(var(--foreground));
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(230 18% 18%);
+    border-radius: 10px;
+    border: 2px solid hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(230 18% 24%); }
+
+  /* Focus ring base */
+  :focus-visible {
+    outline: none;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   Reusable components / utilities
+   ────────────────────────────────────────────────────────────────── */
+@layer components {
+
+  /* Brand mark — violet diamond glyph used in sidebar + login */
+  .fp-brand-mark {
+    @apply grid place-items-center rounded-lg;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 60%),
+      linear-gradient(135deg, hsl(270 45% 55%), hsl(270 45% 38%));
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.08),
+      0 0 0 1px hsl(var(--primary) / 0.25),
+      0 6px 16px -8px hsl(var(--primary) / 0.55);
+    color: rgba(255,255,255,0.95);
+  }
+
+  /* Premium primary button override — used by overriding via .btn-premium */
+  .fp-btn-premium {
+    position: relative;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 50%),
+      linear-gradient(180deg, hsl(270 47% 60%) 0%, hsl(270 47% 50%) 100%);
+    border: 1px solid hsl(270 47% 60% / 0.55);
+    color: #fbfaff;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.18),
+      inset 0 -1px 0 rgba(0,0,0,0.25),
+      0 1px 0 rgba(0,0,0,0.4),
+      0 6px 18px -8px hsl(var(--primary) / 0.55);
+    transition: filter .15s ease, box-shadow .2s ease, transform .08s ease;
+  }
+  .fp-btn-premium:hover {
+    filter: brightness(1.07);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      inset 0 -1px 0 rgba(0,0,0,0.25),
+      0 1px 0 rgba(0,0,0,0.4),
+      0 10px 26px -8px hsl(var(--primary) / 0.7);
+  }
+  .fp-btn-premium:active { transform: translateY(1px); }
+
+  /* Card with very subtle inner highlight */
+  .fp-surface {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.02),
+      0 1px 0 rgba(0,0,0,0.2),
+      0 8px 24px -16px rgba(0,0,0,0.5);
+  }
+
+  /* Status pill (used by badge variants too) */
+  .fp-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium tracking-wide;
+    border: 1px solid hsl(var(--border));
+  }
+  .fp-pill-success {
+    background: hsl(145 50% 45% / 0.12);
+    color: hsl(145 60% 70%);
+    border-color: hsl(145 50% 45% / 0.30);
+  }
+  .fp-pill-warning {
+    background: hsl(35 85% 55% / 0.12);
+    color: hsl(35 85% 75%);
+    border-color: hsl(35 85% 55% / 0.30);
+  }
+  .fp-pill-violet {
+    background: hsl(var(--primary) / 0.12);
+    color: hsl(270 60% 80%);
+    border-color: hsl(var(--primary) / 0.30);
+  }
+  .fp-pill-muted {
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Tiny kbd hint */
+  .fp-kbd {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10.5px;
+    line-height: 1;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--secondary));
+    border: 1px solid hsl(var(--border));
+    padding: 2px 5px;
+    border-radius: 4px;
   }
 }
 
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  .text-balance { text-wrap: balance; }
+  .text-pretty  { text-wrap: pretty; }
+  .font-mono    { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  /* Violet glow ring — applied to active surfaces */
+  .ring-violet-glow {
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.30), 0 0 24px -6px hsl(var(--primary) / 0.40);
   }
 }

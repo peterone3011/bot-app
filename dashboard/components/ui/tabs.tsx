@@ -7,6 +7,10 @@ import { cn } from "@/lib/utils"
 
 const Tabs = TabsPrimitive.Root
 
+/**
+ * Underline-style tab list (Linear / Vercel feel).
+ * Sits on a hairline border-bottom; active tab gets a violet underline + glow.
+ */
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
@@ -14,7 +18,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
+      "inline-flex items-center gap-1 border-b border-border text-muted-foreground",
       className
     )}
     {...props}
@@ -29,7 +33,19 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm",
+      // base
+      "relative inline-flex items-center gap-2 whitespace-nowrap px-3.5 py-2.5 text-sm font-medium",
+      "transition-colors focus-visible:outline-none focus-visible:text-foreground",
+      "disabled:pointer-events-none disabled:opacity-50",
+      // hover
+      "hover:text-foreground",
+      // active state: text + underline via ::after
+      "data-[state=active]:text-foreground",
+      "after:pointer-events-none after:absolute after:left-2 after:right-2 after:-bottom-px after:h-[2px] after:rounded-t after:bg-transparent after:transition-all",
+      "data-[state=active]:after:bg-primary data-[state=active]:after:shadow-[0_0_12px_0_hsl(var(--primary)/0.5)]",
+      // count chip styling for `(N)` inside the label
+      "[&_.count]:font-mono [&_.count]:text-[11px] [&_.count]:tabular-nums [&_.count]:px-1.5 [&_.count]:py-0.5 [&_.count]:rounded-full [&_.count]:border [&_.count]:border-border [&_.count]:bg-secondary [&_.count]:text-muted-foreground",
+      "data-[state=active]:[&_.count]:bg-primary/10 data-[state=active]:[&_.count]:text-brand-300 data-[state=active]:[&_.count]:border-primary/30",
       className
     )}
     {...props}
@@ -44,7 +60,7 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "mt-4 ring-offset-background focus-visible:outline-none animate-fade-in",
       className
     )}
     {...props}
