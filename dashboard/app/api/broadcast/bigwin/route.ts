@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase"
 export const dynamic = "force-dynamic"
 
 const COOLDOWN_KEY = "bigwin:cooldown"
-const COOLDOWN_SECONDS = 14400 // 4 hours
+const COOLDOWN_SECONDS = 14100 // 4h minus 5-min jitter window (bot applies 0–300 s random delay)
 
 const GAME_NAMES = [
   "MONEY COMING",
