@@ -60,6 +60,8 @@ class SubscriptionSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         await handle_role(interaction, self.values[0])
+        # Reset the select so the same option can be clicked again next time
+        await interaction.message.edit(view=RoleView())
 
 
 class RoleView(discord.ui.View):
