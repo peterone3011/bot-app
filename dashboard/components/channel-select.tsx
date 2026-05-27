@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Hash } from "lucide-react"
 
 interface Channel {
   id: string
@@ -38,17 +39,26 @@ export function ChannelSelect({ value, onChange, disabled }: ChannelSelectProps)
         setLoading(false)
       })
       .catch(() => {
-        setError("无法加载频道列表，请检查 Bot Token 配置")
+        setError("无法加载频道列表,请检查 Bot Token 配置")
         setLoading(false)
       })
   }, [])
 
   if (loading) {
-    return <div className="h-10 rounded-md border border-input bg-muted animate-pulse" />
+    return (
+      <div className="h-9 rounded-md border border-input bg-secondary/40 animate-pulse flex items-center gap-2 px-3">
+        <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-pulse" />
+        <span className="text-[12.5px] text-muted-foreground/60">加载频道列表中…</span>
+      </div>
+    )
   }
 
   if (error) {
-    return <p className="text-sm text-destructive">{error}</p>
+    return (
+      <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12.5px] text-destructive">
+        {error}
+      </div>
+    )
   }
 
   // Group by category
@@ -70,7 +80,10 @@ export function ChannelSelect({ value, onChange, disabled }: ChannelSelectProps)
       <SelectContent>
         {ungrouped.map((c) => (
           <SelectItem key={c.id} value={c.id}>
-            # {c.name}
+            <span className="inline-flex items-center gap-1.5">
+              <Hash className="h-3 w-3 text-muted-foreground" />
+              {c.name}
+            </span>
           </SelectItem>
         ))}
         {Object.entries(grouped).map(([category, chs]) => (
@@ -78,7 +91,10 @@ export function ChannelSelect({ value, onChange, disabled }: ChannelSelectProps)
             <SelectLabel>{category}</SelectLabel>
             {chs.map((c) => (
               <SelectItem key={c.id} value={c.id}>
-                # {c.name}
+                <span className="inline-flex items-center gap-1.5">
+                  <Hash className="h-3 w-3 text-muted-foreground" />
+                  {c.name}
+                </span>
               </SelectItem>
             ))}
           </SelectGroup>
