@@ -56,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (msg.description) embed.description = msg.description
   if (msg.footer) embed.footer = { text: msg.footer }
   if (msg.image_url) embed.image = { url: msg.image_url }
-  if (msg.color !== null) embed.color = msg.color
+  if (msg.color !== null && msg.color !== undefined) embed.color = Number(msg.color)
 
   const body: Record<string, unknown> = { embeds: [embed] }
 
