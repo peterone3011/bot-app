@@ -24,6 +24,25 @@ IMAGE_URLS = [
     "https://raw.githubusercontent.com/peterone3011/bot-app/main/dashboard/public/jackpot2.png",
 ]
 
+# 持久化文件：记录最近一次发送日期，重启后仍有效
+_SENT_DATE_FILE = os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "/data") + "/jackpot_last_sent.txt"
+
+
+def _read_last_sent() -> Optional[datetime.date]:
+    try:
+        with open(_SENT_DATE_FILE) as f:
+            return datetime.date.fromisoformat(f.read().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def _write_last_sent(date: datetime.date) -> None:
+    try:
+        with open(_SENT_DATE_FILE, "w") as f:
+            f.write(date.isoformat())
+    except Exception as exc:
+        print(f"[jackpot] Failed to persist last sent date: {exc}", flush=True)
+
 
 def random_jackpot_amount() -> str:
     """100K–500K，个位必须是 0（即 100, 110, 120, … 500）"""
@@ -35,7 +54,6 @@ class JackpotCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._image_index: int = 0
-        self._last_sent_date: Optional[datetime.date] = None
         self.auto_broadcast.start()
 
     def cog_unload(self) -> None:
@@ -43,7 +61,7 @@ class JackpotCog(commands.Cog):
 
     async def _do_broadcast(self, source: str) -> None:
         today = datetime.datetime.now(_UTC).date()
-        if self._last_sent_date == today:
+        if _read_last_sent() == today:
             print(f"[jackpot][{source}] Already sent today, skipping", flush=True)
             return
 
@@ -80,7 +98,7 @@ class JackpotCog(commands.Cog):
 
         try:
             await channel.send(embed=embed, view=view)
-            self._last_sent_date = today
+            _write_last_sent(today)
             self._image_index += 1  # 仅发送成功后才推进，保持交替正确
             print(f"[jackpot][{source}] Broadcast sent: {amount} ({image_url})", flush=True)
         except Exception as exc:
@@ -98,8 +116,6 @@ class JackpotCog(commands.Cog):
             if self.bot.get_channel(JACKPOT_CHANNEL_ID) is not None:
                 break
             await asyncio.sleep(1)
-        # 启动时立即发一次（用于测试部署；正式上线后重启若当天已发会被日期守卫跳过）
-        await self._do_broadcast("startup")
 
 
 async def setup(bot: commands.Bot) -> None:
