@@ -37,6 +37,7 @@ async def main():
 
             await bot.load_extension("cogs.roles")
             await bot.load_extension("cogs.embed")
+            await bot.load_extension("cogs.bigwin")
 
             @bot.tree.error
             async def on_app_command_error(interaction: discord.Interaction, error: Exception):
