@@ -13,8 +13,8 @@ from discord.ext import commands, tasks
 
 _BJT = datetime.timezone(datetime.timedelta(hours=8))
 _UTC = datetime.timezone.utc
-_POST_WEEKDAYS = {1, 3, 5}  # Tuesday=1, Thursday=3, Saturday=5 (UTC weekday, same day as BJT at 15:50 UTC)
-_BROADCAST_TIME = datetime.time(hour=15, minute=50, tzinfo=_UTC)
+_POST_WEEKDAYS = {1, 3, 5}  # Tuesday=1, Thursday=3, Saturday=5
+_BROADCAST_TIME = datetime.time(hour=11, minute=0, tzinfo=_UTC)
 
 UPDATE_CHANNEL_ID: int = int(os.getenv("UPDATE_CHANNEL_ID", "0"))
 STAFF_CHAT_CHANNEL_ID: int = int(os.getenv("STAFF_CHAT_CHANNEL_ID", "0"))
