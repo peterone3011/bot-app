@@ -52,7 +52,7 @@ def parse_rich_text(cell_value) -> str:
                 link = node.get("link", "")
                 if link and not link.startswith(("https://", "http://")):
                     link = "https://" + link
-                parts.append(link)
+                parts.append(link or "")
             else:
                 parts.append(node.get("text", ""))
         return "".join(parts)

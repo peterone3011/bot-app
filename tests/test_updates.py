@@ -31,6 +31,10 @@ def test_parse_rich_text_mixed_nodes():
     ]
     assert upd.parse_rich_text(nodes) == "Play now: https://fortunepurple.com"
 
+def test_parse_rich_text_url_node_link_none():
+    nodes = [{"type": "url", "link": None}]
+    assert upd.parse_rich_text(nodes) == ""
+
 
 # ── get_image_token ───────────────────────────────────────────────────────────
 
