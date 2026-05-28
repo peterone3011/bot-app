@@ -69,7 +69,7 @@
 2. **立即将该行状态改为"发布中"**（先写 Lark，再发 Discord）：防止 Bot 重启或 Lark 回写失败导致重复发布
 3. 将 D 列富文本转为纯文字，处理 URL 类型节点
 4. 判断 E 列：
-   - 有图片（embed-image 类型）：用 Lark API 下载图片字节，作为 `discord.File` 附件；**若下载失败，降级为纯文字发布，不中止整条发布流程**
+   - 有图片（embed-image 类型）：用 Lark API 下载图片字节，作为 `discord.File` 附件；**若下载失败，中止本次发布，打印日志，等下次触发重试（图片是必须的，不允许降级）**
    - 值为"无"或空：纯文字消息
 5. 发送到 `exclusive-updates` 频道（channel ID: `1501874966940094687`）
 6. 依次加 10 个随机正向表情
@@ -99,10 +99,10 @@
 
 位置：`cogs/updates.py` 内。
 
-权限校验：在命令处理函数内检查 `interaction.channel_id == STAFF_CHAT_CHANNEL_ID`，不符合则回复"此命令只能在 staff-chat 使用"并返回。不依赖 Discord Guild 层面权限配置，确保可控。
+权限校验：无频道限制，任意频道可用。响应为 ephemeral（仅调用者可见），不影响其他用户。
 
 流程：
-1. 用户在 staff-chat 输入 `/edit_update`
+1. 用户在任意频道输入 `/edit_update`
 2. Bot 弹出 Modal，包含两个字段：
    - 消息 ID（必填）
    - 新文案（必填，多行文本）
