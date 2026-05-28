@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic"
 
 const COOLDOWN_KEY = "bigwin:cooldown"
 const COOLDOWN_SECONDS = 14100 // 4h minus 5-min jitter window (bot applies 0–300 s random delay)
+const IMAGE_INDEX_KEY = "bigwin:image_index"
 
 const GAME_NAMES = [
   "MONEY COMING",
@@ -43,7 +44,16 @@ async function broadcast(amount: string, game: string, source: "api" | "cron") {
     console.error(`[bigwin][${source}] Redis error during cooldown check:`, err)
   }
 
-  // 2. 读取配图
+  // 2. 读取图片轮换索引（0 → image_1，1 → image_2，严格交替）
+  let imageIndex = 0
+  try {
+    const stored = await redis.get<number>(IMAGE_INDEX_KEY)
+    imageIndex = stored ?? 0
+  } catch (err) {
+    console.error(`[bigwin][${source}] Redis error reading image index:`, err)
+  }
+
+  // 3. 读取配图
   let imageUrl: string | null = null
   try {
     const { data: configRows, error: configError } = await supabase
@@ -54,16 +64,17 @@ async function broadcast(amount: string, game: string, source: "api" | "cron") {
       console.error(`[bigwin][${source}] Supabase config read error:`, configError.message)
     }
     const images = (configRows ?? [])
+      .sort((a: { key: string }, b: { key: string }) => a.key.localeCompare(b.key)) // image_1 在前，image_2 在后
       .map((r: { key: string; value: string }) => r.value)
       .filter(Boolean)
     if (images.length > 0) {
-      imageUrl = images[Math.floor(Math.random() * images.length)]
+      imageUrl = images[imageIndex % images.length]
     }
   } catch (err) {
     console.error(`[bigwin][${source}] Failed to read image config:`, err)
   }
 
-  // 3. 环境变量检查
+  // 4. 环境变量检查
   const botToken = process.env.DISCORD_BOT_TOKEN
   const channelId = process.env.BIGWIN_CHANNEL_ID
   const buttonUrl = process.env.BIGWIN_BUTTON_URL
@@ -72,7 +83,7 @@ async function broadcast(amount: string, game: string, source: "api" | "cron") {
     return NextResponse.json({ error: "Server misconfigured" }, { status: 503 })
   }
 
-  // 4. 发送到 Discord
+  // 5. 发送到 Discord
   const embed: Record<string, unknown> = {
     description: `🏆 **BIG WIN ALERT!!**\n\nA Fortune Chasers just won **${amount} SC** on **${game}**!\nThink you're next? Jump in and spin! 🎰💜`,
     color: 0xff9933,
@@ -108,11 +119,16 @@ async function broadcast(amount: string, game: string, source: "api" | "cron") {
     return NextResponse.json({ error: "Discord API error", detail }, { status: 502 })
   }
 
-  // 5. 设置冷却（仅在成功发送后）
+  // 6. 设置冷却 + 翻转图片索引（仅在成功发送后）
   try {
     await redis.set(COOLDOWN_KEY, "1", { ex: COOLDOWN_SECONDS })
   } catch (err) {
     console.error(`[bigwin][${source}] Redis error when setting cooldown:`, err)
+  }
+  try {
+    await redis.set(IMAGE_INDEX_KEY, imageIndex === 0 ? 1 : 0)
+  } catch (err) {
+    console.error(`[bigwin][${source}] Redis error when flipping image index:`, err)
   }
 
   console.info(`[bigwin][${source}] Broadcast sent: ${amount} SC on ${game}`)
