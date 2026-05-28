@@ -12,6 +12,8 @@ try:
 except ValueError:
     JACKPOT_CHANNEL_ID = 0
 
+JACKPOT_ENABLED: bool = os.getenv("JACKPOT_ENABLED", "0") == "1"
+
 BUTTON_URL: str = os.getenv("BIGWIN_BUTTON_URL", "")
 
 _UTC = datetime.timezone.utc
@@ -60,6 +62,9 @@ class JackpotCog(commands.Cog):
         self.auto_broadcast.cancel()
 
     async def _do_broadcast(self, source: str) -> None:
+        if not JACKPOT_ENABLED:
+            print(f"[jackpot][{source}] Disabled (JACKPOT_ENABLED != 1), skipping", flush=True)
+            return
         today = datetime.datetime.now(_UTC).date()
         if _read_last_sent() == today:
             print(f"[jackpot][{source}] Already sent today, skipping", flush=True)
