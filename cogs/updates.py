@@ -171,3 +171,143 @@ async def _write_cell_with_retry(
             )
             if attempt < retries:
                 await asyncio.sleep(5)
+
+
+# ── Modal ─────────────────────────────────────────────────────────────────────
+
+class EditUpdateModal(discord.ui.Modal, title="Edit Update Message"):
+    message_id = discord.ui.TextInput(
+        label="Message ID",
+        placeholder="Right-click message → Copy Message ID",
+        required=True,
+        max_length=25,
+    )
+    new_content = discord.ui.TextInput(
+        label="New Content",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=2000,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        try:
+            channel = interaction.client.get_channel(UPDATE_CHANNEL_ID)
+            if not isinstance(channel, discord.abc.Messageable):
+                await interaction.followup.send("找不到 updates 频道。", ephemeral=True)
+                return
+            msg = await channel.fetch_message(int(self.message_id.value.strip()))
+            await msg.edit(content=self.new_content.value)
+            await interaction.followup.send("消息已更新。", ephemeral=True)
+        except ValueError:
+            await interaction.followup.send("消息 ID 格式不正确，请填入纯数字。", ephemeral=True)
+        except discord.NotFound:
+            await interaction.followup.send("找不到该消息，请确认 ID 是否正确。", ephemeral=True)
+        except Exception as exc:
+            await interaction.followup.send(f"更新失败：{exc}", ephemeral=True)
+
+
+# ── Cog ───────────────────────────────────────────────────────────────────────
+
+class UpdatesCog(commands.Cog):
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot = bot
+        self.auto_post.start()
+
+    def cog_unload(self) -> None:
+        self.auto_post.cancel()
+
+    @tasks.loop(time=[_BROADCAST_TIME])
+    async def auto_post(self) -> None:
+        if datetime.datetime.now(_UTC).weekday() not in _POST_WEEKDAYS:
+            return
+        await self._do_post()
+
+    @auto_post.before_loop
+    async def before_auto_post(self) -> None:
+        await self.bot.wait_until_ready()
+
+    @discord.app_commands.command(name="edit_update", description="编辑已发布的 updates 消息（仅 Mod）")
+    async def edit_update(self, interaction: discord.Interaction) -> None:
+        if not any(r.id == MOD_ROLE_ID for r in interaction.user.roles):
+            await interaction.response.send_message("无权限。", ephemeral=True)
+            return
+        await interaction.response.send_modal(EditUpdateModal())
+
+    async def _do_post(self) -> None:
+        try:
+            rows = await _read_sheet()
+        except Exception as exc:
+            print(f"[updates] Failed to read Lark sheet: {exc}", flush=True)
+            return
+
+        result = find_pending_row(rows)
+        if result is None:
+            print("[updates] No pending row found", flush=True)
+            return
+
+        sheet_row, row = result
+        content = parse_rich_text(row[3] if len(row) > 3 else None)
+        image_token = get_image_token(row[4] if len(row) > 4 else None)
+
+        try:
+            await _write_cell_with_retry(sheet_row, "F", "发布中")
+        except Exception as exc:
+            print(f"[updates] Cannot mark row {sheet_row} as 发布中, aborting: {exc}", flush=True)
+            return
+
+        file: Optional[discord.File] = None
+        if image_token:
+            for attempt in range(1, 4):
+                try:
+                    image_bytes = await _download_image(image_token)
+                    file = discord.File(io.BytesIO(image_bytes), filename="update.jpg")
+                    break
+                except Exception as exc:
+                    print(
+                        f"[updates] Image download attempt {attempt}/3 failed: {exc}",
+                        flush=True,
+                    )
+                    if attempt < 3:
+                        await asyncio.sleep(15)
+
+            if file is None:
+                await _write_cell_with_retry(sheet_row, "F", "待发布")
+                staff = self.bot.get_channel(STAFF_CHAT_CHANNEL_ID)
+                if isinstance(staff, discord.abc.Messageable):
+                    await staff.send(
+                        f"⚠️ Updates 自动发布失败：图片下载重试 3 次均失败，请手动处理。\n"
+                        f"表格第 {sheet_row} 行已恢复为「待发布」。"
+                    )
+                print(f"[updates] Aborted row {sheet_row}: image unavailable", flush=True)
+                return
+
+        channel = self.bot.get_channel(UPDATE_CHANNEL_ID)
+        if not isinstance(channel, discord.abc.Messageable):
+            print(f"[updates] UPDATE_CHANNEL_ID {UPDATE_CHANNEL_ID} not found", flush=True)
+            await _write_cell_with_retry(sheet_row, "F", "待发布")
+            return
+
+        try:
+            if file:
+                msg = await channel.send(content=content, file=file)
+            else:
+                msg = await channel.send(content=content)
+        except Exception as exc:
+            print(f"[updates] Discord send failed: {exc}", flush=True)
+            await _write_cell_with_retry(sheet_row, "F", "待发布")
+            return
+
+        for emoji in random.sample(REACTION_POOL, 10):
+            try:
+                await msg.add_reaction(emoji)
+            except Exception:
+                pass
+
+        await _write_cell_with_retry(sheet_row, "F", "已发布")
+        await _write_cell_with_retry(sheet_row, "G", str(msg.id))
+        print(f"[updates] Posted row {sheet_row}, Discord message ID {msg.id}", flush=True)
+
+
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(UpdatesCog(bot))
