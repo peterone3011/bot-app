@@ -102,3 +102,72 @@ def find_pending_row(
         if row_date <= today:
             return (i + 1, row)  # i+1 converts to 1-based sheet row
     return None
+
+# ── Lark API client ───────────────────────────────────────────────────────────
+
+async def _get_lark_token() -> str:
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{LARK_BASE}/auth/v3/app_access_token/internal",
+            json={"app_id": LARK_APP_ID, "app_secret": LARK_APP_SECRET},
+        ) as resp:
+            data = await resp.json()
+            if data.get("code") != 0:
+                raise RuntimeError(f"Lark token error: {data.get('msg')}")
+            return data["app_access_token"]
+
+
+async def _read_sheet() -> list:
+    token = await _get_lark_token()
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            f"{LARK_BASE}/sheets/v2/spreadsheets/{LARK_SPREADSHEET_TOKEN}"
+            f"/values/{LARK_SHEET_ID}!A1:G100",
+            headers={"Authorization": f"Bearer {token}"},
+        ) as resp:
+            data = await resp.json()
+            return data["data"]["valueRange"]["values"]
+
+
+async def _download_image(file_token: str) -> bytes:
+    token = await _get_lark_token()
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            f"{LARK_BASE}/drive/v1/medias/{file_token}/download",
+            headers={"Authorization": f"Bearer {token}"},
+        ) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"Image download HTTP {resp.status}")
+            return await resp.read()
+
+
+async def _write_cell(sheet_row: int, col: str, value: str) -> None:
+    """Write a single cell. sheet_row is 1-based."""
+    token = await _get_lark_token()
+    range_str = f"{LARK_SHEET_ID}!{col}{sheet_row}"
+    async with aiohttp.ClientSession() as session:
+        async with session.put(
+            f"{LARK_BASE}/sheets/v2/spreadsheets/{LARK_SPREADSHEET_TOKEN}/values",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"valueRange": {"range": range_str, "values": [[value]]}},
+        ) as resp:
+            data = await resp.json()
+            if data.get("code") != 0:
+                raise RuntimeError(f"Lark write error: {data.get('msg')}")
+
+
+async def _write_cell_with_retry(
+    sheet_row: int, col: str, value: str, retries: int = 3
+) -> None:
+    for attempt in range(1, retries + 1):
+        try:
+            await _write_cell(sheet_row, col, value)
+            return
+        except Exception as exc:
+            print(
+                f"[updates] Lark write {col}{sheet_row}={value!r} "
+                f"attempt {attempt}/{retries} failed: {exc}",
+                flush=True,
+            )
+            if attempt < retries:
+                await asyncio.sleep(5)
