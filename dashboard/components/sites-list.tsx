@@ -188,6 +188,7 @@ export function SitesList({ initialSites }: { initialSites: Site[] }) {
   }
 
   async function handleRename(id: string, name: string) {
+    if (!name.trim()) return
     try {
       const res = await fetch(`/api/sites/${id}`, {
         method: "PUT",

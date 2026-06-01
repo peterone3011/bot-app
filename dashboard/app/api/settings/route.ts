@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { rateLimitCheck } from "@/lib/rate-limit"
 
+const ALLOWED_KEYS = new Set(["roles_channel_name"])
+
 export async function GET(req: NextRequest) {
   const limited = await rateLimitCheck(req)
   if (limited) return limited
@@ -36,6 +38,9 @@ export async function PUT(req: NextRequest) {
   const { key, value } = body
   if (!key || typeof key !== "string") {
     return NextResponse.json({ error: "key is required" }, { status: 400 })
+  }
+  if (!ALLOWED_KEYS.has(key)) {
+    return NextResponse.json({ error: `Key not allowed: ${key}` }, { status: 400 })
   }
   if (value === undefined || value === null) {
     return NextResponse.json({ error: "value is required" }, { status: 400 })

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Hash, Image as ImageIcon, Check, AlertCircle } from "lucide-react"
+import { Hash, Check, AlertCircle } from "lucide-react"
 
 async function saveSetting(key: string, value: string): Promise<boolean> {
   const res = await fetch("/api/settings", {
@@ -17,10 +17,9 @@ async function saveSetting(key: string, value: string): Promise<boolean> {
 
 export default function SettingsPage() {
   const [rolesChannel, setRolesChannel] = useState("")
-  const [bigwinImage1, setBigwinImage1] = useState("")
-  const [bigwinImage2, setBigwinImage2] = useState("")
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState("")
   const [msgKind, setMsgKind] = useState<"ok" | "err">("ok")
   const msgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -33,12 +32,11 @@ export default function SettingsPage() {
       })
       .then((data) => {
         setRolesChannel(data.roles_channel_name ?? "")
-        setBigwinImage1(data.bigwin_image_1 ?? "")
-        setBigwinImage2(data.bigwin_image_2 ?? "")
         setLoading(false)
       })
       .catch(() => {
-        showMsg("加载失败,请刷新页面", "err")
+        showMsg("加载失败，请刷新页面重试", "err")
+        setLoadError(true)
         setLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -51,25 +49,12 @@ export default function SettingsPage() {
   }
 
   async function handleSaveRoles() {
-    if (saving !== null) return
+    if (saving) return
     setMsg("")
-    setSaving("roles")
+    setSaving(true)
     const ok = await saveSetting("roles_channel_name", rolesChannel).catch(() => false)
     showMsg(ok ? "已保存" : "保存失败", ok ? "ok" : "err")
-    setSaving(null)
-  }
-
-  async function handleSaveImages() {
-    if (saving !== null) return
-    setMsg("")
-    setSaving("images")
-    const [ok1, ok2] = await Promise.all([
-      saveSetting("bigwin_image_1", bigwinImage1).catch(() => false),
-      saveSetting("bigwin_image_2", bigwinImage2).catch(() => false),
-    ])
-    const ok = ok1 && ok2
-    showMsg(ok ? "已保存" : "部分保存失败,请重试", ok ? "ok" : "err")
-    setSaving(null)
+    setSaving(false)
   }
 
   return (
@@ -83,7 +68,7 @@ export default function SettingsPage() {
         </div>
         <h1 className="mt-1.5 text-[22px] font-semibold tracking-tight">全局设置</h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          身份组频道、大奖播报配图等 Bot 行为的全局开关。
+          Bot 行为的全局开关。
         </p>
       </div>
 
@@ -111,64 +96,8 @@ export default function SettingsPage() {
             </p>
           </div>
           <div className="flex justify-end pt-1">
-            <Button onClick={handleSaveRoles} disabled={saving === "roles" || loading} size="sm">
-              {saving === "roles" ? "保存中…" : "保存"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Bigwin images */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ImageIcon className="h-4 w-4 text-brand-300" />
-            大奖播报配图
-          </CardTitle>
-          <CardDescription>每次播报随机选一张展示。留空则不显示图片。</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="bigwin-img-1">图片 1 URL</Label>
-            <Input
-              id="bigwin-img-1"
-              value={bigwinImage1}
-              onChange={(e) => setBigwinImage1(e.target.value)}
-              placeholder="https://cdn.discordapp.com/..."
-              disabled={loading}
-            />
-            {bigwinImage1 && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={bigwinImage1}
-                alt="预览图 1"
-                className="mt-1 h-24 rounded-md object-cover border border-border bg-secondary"
-              />
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="bigwin-img-2">图片 2 URL</Label>
-            <Input
-              id="bigwin-img-2"
-              value={bigwinImage2}
-              onChange={(e) => setBigwinImage2(e.target.value)}
-              placeholder="https://cdn.discordapp.com/..."
-              disabled={loading}
-            />
-            {bigwinImage2 && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={bigwinImage2}
-                alt="预览图 2"
-                className="mt-1 h-24 rounded-md object-cover border border-border bg-secondary"
-              />
-            )}
-          </div>
-
-          <div className="flex justify-end pt-1">
-            <Button onClick={handleSaveImages} disabled={saving === "images" || loading} size="sm">
-              {saving === "images" ? "保存中…" : "保存两张图片"}
+            <Button onClick={handleSaveRoles} disabled={saving || loading || loadError} size="sm">
+              {saving ? "保存中…" : "保存"}
             </Button>
           </div>
         </CardContent>

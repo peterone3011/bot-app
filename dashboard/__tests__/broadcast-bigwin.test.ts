@@ -86,7 +86,7 @@ describe("POST /api/broadcast/bigwin", () => {
     const { POST } = await import("@/app/api/broadcast/bigwin/route")
     const res = await POST(makeReq({ amount: "10,000.0", game: "Fortune Dragon" }, "Bearer test-key") as any)
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ ok: true })
+    expect(await res.json()).toEqual({ ok: true, amount: "10,000.0", game: "Fortune Dragon" })
     expect(mockFetch).toHaveBeenCalledOnce()
     const [url, options] = mockFetch.mock.calls[0]
     expect(url).toBe("https://discord.com/api/v10/channels/channel-123/messages")
@@ -99,10 +99,19 @@ describe("POST /api/broadcast/bigwin", () => {
     expect(body.components[0].components[0].label).toBe("Play Now")
   })
 
-  it("writes cooldown key with 4h TTL after successful Discord send", async () => {
+  it("embed always includes an image URL without any external config", async () => {
+    const { POST } = await import("@/app/api/broadcast/bigwin/route")
+    const res = await POST(makeReq({ amount: "5,000.0", game: "Zeus Power" }, "Bearer test-key") as any)
+    expect(res.status).toBe(200)
+    const [, options] = mockFetch.mock.calls[0]
+    const body = JSON.parse(options.body)
+    expect(body.embeds[0].image?.url).toMatch(/^https:\/\/.+\.(jpg|png|webp|gif)/)
+  })
+
+  it("writes cooldown key with correct TTL after successful Discord send", async () => {
     const { POST } = await import("@/app/api/broadcast/bigwin/route")
     await POST(makeReq({ amount: "10,000.0", game: "Fortune Dragon" }, "Bearer test-key") as any)
-    expect(mockRedisSet).toHaveBeenCalledWith("bigwin:cooldown", "1", { ex: 14400 })
+    expect(mockRedisSet).toHaveBeenCalledWith("bigwin:cooldown", "1", { ex: 14100 })
   })
 
   it("returns 502 and does NOT write cooldown when Discord returns error status", async () => {
