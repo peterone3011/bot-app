@@ -4,7 +4,7 @@ import { Redis } from "@upstash/redis"
 export const dynamic = "force-dynamic"
 
 const COOLDOWN_KEY = "bigwin:cooldown"
-const COOLDOWN_SECONDS = 14100 // 4h minus 5-min jitter window (bot applies 0–300 s random delay)
+const COOLDOWN_SECONDS = 21600 // 6h safety net — matches bot's minimum interval (_MIN_INTERVAL_H)
 const IMAGE_INDEX_KEY = "bigwin:image_index"
 
 const BASE_URL = "https://fortunepurplebot.vercel.app"
@@ -47,9 +47,9 @@ const GAME_NAMES = [
   "3SUPER HOT CHILLIES",
 ]
 
-/** 随机生成金额：1000–30000 之间的整数 + .0 或 .5 */
+/** 随机生成金额：1,000–8,000 之间的整数 + .0 或 .5 */
 function randomAmount(): string {
-  const integer = Math.floor(Math.random() * 29001) + 1000
+  const integer = Math.floor(Math.random() * 7001) + 1000
   const decimal = Math.random() < 0.5 ? ".0" : ".5"
   return integer.toLocaleString("en-US") + decimal
 }
@@ -144,7 +144,7 @@ async function broadcast(amount: string, game: string, source: "api" | "cron") {
   return NextResponse.json({ ok: true, amount, game })
 }
 
-// ─── GET：Railway Bot 每4小时触发，自动生成文案 ──────────────────────────────
+// ─── GET：Railway Bot 随机 6–14 小时触发，自动生成文案 ────────────────────────
 
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
