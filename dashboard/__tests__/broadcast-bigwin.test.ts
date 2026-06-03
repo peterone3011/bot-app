@@ -190,3 +190,108 @@ describe("POST /api/broadcast/bigwin", () => {
     expect(data.recorded).toBe(false)
   })
 })
+
+function makeGetReq(authHeader?: string) {
+  return new Request("https://x.com/api/broadcast/bigwin", {
+    method: "GET",
+    headers: {
+      ...(authHeader ? { authorization: authHeader } : {}),
+    },
+  })
+}
+
+describe("GET /api/broadcast/bigwin (cron)", () => {
+  const mockFetch = vi.fn()
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", mockFetch)
+    process.env.CRON_SECRET = "cron-secret"
+    process.env.DISCORD_BOT_TOKEN = "test-bot-token"
+    process.env.BIGWIN_CHANNEL_ID = "channel-123"
+    process.env.BIGWIN_BUTTON_URL = "https://fortunepurple.com"
+    mockRedisGet.mockResolvedValue(null)
+    mockRedisSet.mockResolvedValue("OK")
+    mockPipelineExec.mockResolvedValue([])
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ id: "discord-msg-id-cron" }),
+      text: () => Promise.resolve(""),
+    })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+    delete process.env.CRON_SECRET
+    delete process.env.DISCORD_BOT_TOKEN
+    delete process.env.BIGWIN_CHANNEL_ID
+    delete process.env.BIGWIN_BUTTON_URL
+  })
+
+  it("returns 401 with no Authorization header", async () => {
+    const { GET } = await import("@/app/api/broadcast/bigwin/route")
+    const res = await GET(makeGetReq() as any)
+    expect(res.status).toBe(401)
+  })
+
+  it("returns 401 with wrong cron secret", async () => {
+    const { GET } = await import("@/app/api/broadcast/bigwin/route")
+    const res = await GET(makeGetReq("Bearer wrong-secret") as any)
+    expect(res.status).toBe(401)
+  })
+
+  it("returns skipped:cooldown when cooldown is active", async () => {
+    mockRedisGet.mockResolvedValueOnce("1")
+    const { GET } = await import("@/app/api/broadcast/bigwin/route")
+    const res = await GET(makeGetReq("Bearer cron-secret") as any)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data).toEqual({ skipped: true, reason: "cooldown" })
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it("broadcasts successfully and returns source:cron", async () => {
+    const { GET } = await import("@/app/api/broadcast/bigwin/route")
+    const res = await GET(makeGetReq("Bearer cron-secret") as any)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data).toMatchObject({
+      ok: true,
+      source: "cron",
+      recorded: true,
+    })
+    expect(data.id).toBe("discord-msg-id-cron")
+    expect(mockFetch).toHaveBeenCalledOnce()
+  })
+
+  it("writes history to bigwin:history and bigwin:history:cron after successful GET", async () => {
+    const { GET } = await import("@/app/api/broadcast/bigwin/route")
+    await GET(makeGetReq("Bearer cron-secret") as any)
+    expect(mockRedisPipeline).toHaveBeenCalled()
+    expect(mockPipeline.zadd).toHaveBeenCalledWith(
+      "bigwin:history",
+      expect.objectContaining({ member: expect.stringContaining('"source":"cron"') })
+    )
+    expect(mockPipeline.zadd).toHaveBeenCalledWith(
+      "bigwin:history:cron",
+      expect.objectContaining({ member: expect.stringContaining('"source":"cron"') })
+    )
+    expect(mockPipelineExec).toHaveBeenCalled()
+  })
+
+  it("writes cooldown key with correct TTL after successful cron broadcast", async () => {
+    const { GET } = await import("@/app/api/broadcast/bigwin/route")
+    await GET(makeGetReq("Bearer cron-secret") as any)
+    expect(mockRedisSet).toHaveBeenCalledWith("bigwin:cooldown", "1", { ex: 21600 })
+  })
+
+  it("returns recorded:false when Redis history write throws but cron broadcast succeeds", async () => {
+    mockPipelineExec.mockRejectedValueOnce(new Error("Redis error"))
+    const { GET } = await import("@/app/api/broadcast/bigwin/route")
+    const res = await GET(makeGetReq("Bearer cron-secret") as any)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.ok).toBe(true)
+    expect(data.recorded).toBe(false)
+  })
+})
