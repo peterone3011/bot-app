@@ -155,15 +155,22 @@ describe("POST /api/broadcast/bigwin", () => {
     const { POST } = await import("@/app/api/broadcast/bigwin/route")
     await POST(makeReq({ amount: "5,000.0", game: "Zeus" }, "Bearer test-key") as any)
     expect(mockRedisPipeline).toHaveBeenCalled()
-    expect(mockPipeline.zadd).toHaveBeenCalledWith(
-      "bigwin:history",
-      expect.objectContaining({ member: expect.stringContaining('"source":"api"') })
-    )
-    expect(mockPipeline.zadd).toHaveBeenCalledWith(
-      "bigwin:history:api",
-      expect.objectContaining({ member: expect.stringContaining('"source":"api"') })
-    )
     expect(mockPipelineExec).toHaveBeenCalled()
+
+    const allCalls = mockPipeline.zadd.mock.calls
+    const historyCall = allCalls.find(([key]: [string]) => key === "bigwin:history")
+    const sourceCall = allCalls.find(([key]: [string]) => key === "bigwin:history:api")
+    expect(historyCall).toBeDefined()
+    expect(sourceCall).toBeDefined()
+
+    const member = JSON.parse(historyCall![1].member)
+    expect(member).toMatchObject({
+      amount: "5,000.0",
+      game: "Zeus",
+      source: "api",
+      id: "discord-msg-id-123",
+    })
+    expect(typeof member.ts).toBe("number")
   })
 
   it("does not write history when cooldown is active", async () => {
@@ -268,15 +275,22 @@ describe("GET /api/broadcast/bigwin (cron)", () => {
     const { GET } = await import("@/app/api/broadcast/bigwin/route")
     await GET(makeGetReq("Bearer cron-secret") as any)
     expect(mockRedisPipeline).toHaveBeenCalled()
-    expect(mockPipeline.zadd).toHaveBeenCalledWith(
-      "bigwin:history",
-      expect.objectContaining({ member: expect.stringContaining('"source":"cron"') })
-    )
-    expect(mockPipeline.zadd).toHaveBeenCalledWith(
-      "bigwin:history:cron",
-      expect.objectContaining({ member: expect.stringContaining('"source":"cron"') })
-    )
     expect(mockPipelineExec).toHaveBeenCalled()
+
+    const allCalls = mockPipeline.zadd.mock.calls
+    const historyCall = allCalls.find(([key]: [string]) => key === "bigwin:history")
+    const sourceCall = allCalls.find(([key]: [string]) => key === "bigwin:history:cron")
+    expect(historyCall).toBeDefined()
+    expect(sourceCall).toBeDefined()
+
+    const member = JSON.parse(historyCall![1].member)
+    expect(member).toMatchObject({
+      source: "cron",
+      id: "discord-msg-id-cron",
+    })
+    expect(typeof member.amount).toBe("string")
+    expect(typeof member.game).toBe("string")
+    expect(typeof member.ts).toBe("number")
   })
 
   it("writes cooldown key with correct TTL after successful cron broadcast", async () => {

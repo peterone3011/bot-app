@@ -154,15 +154,15 @@ async function broadcast(amount: string, game: string, source: "api" | "cron") {
   // 7. 写入播报历史（fail-open：写入失败不阻断播报响应）
   const ts = Date.now()
   const cutoff = ts - HISTORY_TTL_MS
-  const sourceKey = `${HISTORY_KEY}:${source}` as const
+  const sourceKey = `${HISTORY_KEY}:${source}`
   const member = JSON.stringify({ id: discordMessageId, ts, amount, game, source, discordMessageId })
   let recorded = true
   try {
     const pipeline = redis.pipeline()
     pipeline.zadd(HISTORY_KEY, { score: ts, member })
-    pipeline.zremrangebyscore(HISTORY_KEY, 0, cutoff)
+    pipeline.zremrangebyscore(HISTORY_KEY, "-inf", cutoff)
     pipeline.zadd(sourceKey, { score: ts, member })
-    pipeline.zremrangebyscore(sourceKey, 0, cutoff)
+    pipeline.zremrangebyscore(sourceKey, "-inf", cutoff)
     await pipeline.exec()
   } catch (err) {
     console.error(`[bigwin][${source}] Redis error writing history:`, err)
