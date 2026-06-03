@@ -53,6 +53,13 @@ describe("GET /api/broadcast/bigwin/history", () => {
     expect(await res.json()).toEqual({ error: "Invalid source" })
   })
 
+  it("returns 400 for empty source param", async () => {
+    const { GET } = await import("@/app/api/broadcast/bigwin/history/route")
+    const res = await GET(makeReq("?source=") as any)
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: "Invalid source" })
+  })
+
   it("returns empty records array when history is empty", async () => {
     const { GET } = await import("@/app/api/broadcast/bigwin/history/route")
     const res = await GET(makeReq() as any)

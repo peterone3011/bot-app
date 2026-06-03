@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Redis } from "@upstash/redis"
 import { auth } from "@/lib/auth"
+import { rateLimitCheck } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
 
@@ -23,6 +24,9 @@ interface HistoryRecord {
 }
 
 export async function GET(req: NextRequest) {
+  const limited = await rateLimitCheck(req)
+  if (limited) return limited
+
   const session = await auth()
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
