@@ -6,6 +6,8 @@ export const dynamic = "force-dynamic"
 const COOLDOWN_KEY = "bigwin:cooldown"
 const COOLDOWN_SECONDS = 21600 // 6h safety net — matches bot's minimum interval (_MIN_INTERVAL_H)
 const IMAGE_INDEX_KEY = "bigwin:image_index"
+const HISTORY_KEY = "bigwin:history"
+const HISTORY_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days in ms
 
 const BASE_URL = "https://fortunepurplebot.vercel.app"
 const IMAGE_URLS = [`${BASE_URL}/bigwins1.jpg`, `${BASE_URL}/bigwins2.jpg`]
@@ -128,7 +130,16 @@ async function broadcast(amount: string, game: string, source: "api" | "cron") {
     return NextResponse.json({ error: "Discord API error", detail }, { status: 502 })
   }
 
-  // 5. 设置冷却 + 翻转图片索引（仅在成功发送后）
+  // 5. 提取 Discord message ID（best-effort）
+  let discordMessageId = ""
+  try {
+    const discordData = await discordRes.json()
+    discordMessageId = discordData?.id ?? ""
+  } catch {
+    // message ID is non-critical, proceed without it
+  }
+
+  // 6. 设置冷却 + 翻转图片索引（仅在成功发送后）
   try {
     await redis.set(COOLDOWN_KEY, "1", { ex: COOLDOWN_SECONDS })
   } catch (err) {
@@ -140,8 +151,26 @@ async function broadcast(amount: string, game: string, source: "api" | "cron") {
     console.error(`[bigwin][${source}] Redis error when flipping image index:`, err)
   }
 
+  // 7. 写入播报历史（fail-open：写入失败不阻断播报响应）
+  const ts = Date.now()
+  const cutoff = ts - HISTORY_TTL_MS
+  const sourceKey = `${HISTORY_KEY}:${source}`
+  const member = JSON.stringify({ id: discordMessageId, ts, amount, game, source, discordMessageId })
+  let recorded = true
+  try {
+    const pipeline = redis.pipeline()
+    pipeline.zadd(HISTORY_KEY, { score: ts, member })
+    pipeline.zremrangebyscore(HISTORY_KEY, "-inf", cutoff)
+    pipeline.zadd(sourceKey, { score: ts, member })
+    pipeline.zremrangebyscore(sourceKey, "-inf", cutoff)
+    await pipeline.exec()
+  } catch (err) {
+    console.error(`[bigwin][${source}] Redis error writing history:`, err)
+    recorded = false
+  }
+
   console.info(`[bigwin][${source}] Broadcast sent: ${amount} SC on ${game}`)
-  return NextResponse.json({ ok: true, amount, game })
+  return NextResponse.json({ ok: true, id: discordMessageId, amount, game, source, recorded })
 }
 
 // ─── GET：Railway Bot 随机 6–14 小时触发，自动生成文案 ────────────────────────
