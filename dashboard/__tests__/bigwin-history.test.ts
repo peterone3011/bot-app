@@ -12,6 +12,8 @@ vi.mock("@upstash/redis", () => ({
   },
 }))
 
+vi.mock("@/lib/rate-limit", () => ({ rateLimitCheck: vi.fn().mockResolvedValue(null) }))
+
 const mockAuth = vi.fn()
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }))
 
