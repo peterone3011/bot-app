@@ -97,7 +97,7 @@ export default function BigwinHistoryPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
+              <table className="w-full text-[13px]" aria-label="Big Win 播报历史">
                 <thead>
                   <tr className="border-b border-border text-muted-foreground">
                     <th className="text-left py-2 pr-4 font-medium">时间</th>
@@ -108,7 +108,7 @@ export default function BigwinHistoryPage() {
                 </thead>
                 <tbody>
                   {records.map((r) => (
-                    <tr key={r.id || r.ts} className="border-b border-border/50 hover:bg-accent/20">
+                    <tr key={r.id} className="border-b border-border/50 hover:bg-accent/20">
                       <td className="py-2.5 pr-4 tabular-nums text-muted-foreground">
                         {formatTs(r.ts)}
                       </td>
