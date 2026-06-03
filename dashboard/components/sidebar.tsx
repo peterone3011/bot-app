@@ -12,12 +12,14 @@ import {
   Globe,
   Settings,
   LogOut,
+  Trophy,
 } from "lucide-react"
 
 const navItems = [
-  { href: "/dashboard/embeds",   label: "Embed 消息", icon: MessageSquare, short: "E" },
-  { href: "/dashboard/sites",    label: "站点管理",    icon: Globe,         short: "S" },
-  { href: "/dashboard/settings", label: "全局设置",    icon: Settings,      short: "C" },
+  { href: "/dashboard/embeds",   label: "Embed 消息",   icon: MessageSquare, short: "E" },
+  { href: "/dashboard/sites",    label: "站点管理",      icon: Globe,         short: "S" },
+  { href: "/dashboard/settings", label: "全局设置",      icon: Settings,      short: "C" },
+  { href: "/dashboard/bigwin",   label: "Big Win 记录", icon: Trophy,        short: "B" },
 ]
 
 function BrandMark({ size = 32 }: { size?: number }) {
