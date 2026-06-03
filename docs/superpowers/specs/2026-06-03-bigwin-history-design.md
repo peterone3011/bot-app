@@ -9,78 +9,108 @@
 
 ### Redis Sorted Set
 
-| 属性 | 值 |
-|---|---|
-| Key | `bigwin:history` |
-| Type | Sorted Set |
-| Score | Unix 时间戳（秒） |
-| Member | JSON 字符串 |
+维护三个 Sorted Set，分别存全量、cron 专属、api 专属，查询时直接读对应 key，避免"先取再过滤"导致结果不足的问题：
 
-Member 结构：
+| Key | 说明 |
+|---|---|
+| `bigwin:history` | 全量记录 |
+| `bigwin:history:cron` | 仅 bot 自动触发 |
+| `bigwin:history:api` | 仅技术接口手动触发 |
+
+**Score：** Unix 时间戳（秒）
+
+**Member（JSON 字符串）：**
 ```json
 {
+  "id": "<discordMessageId>",
   "ts": 1748880000,
   "amount": "932",
   "game": "MONEY COMING",
-  "source": "api"
+  "source": "api",
+  "discordMessageId": "1234567890123456789"
 }
 ```
+
+`id` 直接使用 Discord 返回的 message ID，既保证唯一性，也方便日后在 Discord 里直接定位到那条消息。
 
 `source` 取值：
 - `cron`：Railway bot 每 6–14 小时自动触发（GET 请求）
 - `api`：技术接口手动传入真实数据（POST 请求）
 
-### 写入时机
+### 只记录成功发送的播报
 
-在现有 `broadcast()` 函数中，Discord 消息发送成功后写入。两条路径（GET/POST）共用同一函数，一处修改全覆盖。
+以下情况**不写入**历史：
+- 冷却期内被跳过（cooldown skipped）
+- 鉴权失败（401）
+- 参数校验失败（400）
+- Discord API 报错或网络不通
+
+只有 Discord 返回 2xx、消息确认发出后才写入。
+
+### 历史写入失败的处理
+
+写入历史是审计操作，不应影响播报结果。如果 Redis 写入报错：
+- 播报接口仍返回成功
+- `console.error` 记录错误
+- 响应体附带 `"recorded": false`，让调用方知道审计记录未写入
 
 ### 30 天自动清理
 
-每次写入时附带删除 30 天前的旧数据：
+每次写入时同步删除 30 天前的数据，三个 key 各执行一次，不需要定时任务：
 ```
 ZADD bigwin:history <ts> <json>
 ZREMRANGEBYSCORE bigwin:history 0 <ts_30days_ago>
+// 同理对 bigwin:history:cron 或 bigwin:history:api
 ```
-
-不需要定时任务，不需要单独的 TTL 管理。
 
 ---
 
 ## 2. 查询接口
 
 **URL：** `GET /api/broadcast/bigwin/history`
-**文件：** `app/api/broadcast/bigwin/history/route.ts`
+**文件：** `dashboard/app/api/broadcast/bigwin/history/route.ts`
 
-**鉴权：** Dashboard 登录态（session），未登录返回 401。
+**鉴权：** 在 route handler 内部显式调用 `auth()` 检查 session，未登录返回 401。
+> 注意：不要依赖 middleware 兜底——现有 middleware 不保护 `/api/broadcast/*`（因为播报接口走 Bearer token），只有历史接口需要 session 保护，故在 route 内单独处理。
 
 **查询参数：**
-- `source=cron`：只返回 bot 自动发的
-- `source=api`：只返回技术接口发的
-- 不传：返回全部
+- `source=cron`：直接读 `bigwin:history:cron`
+- `source=api`：直接读 `bigwin:history:api`
+- 不传：读 `bigwin:history`
 
 **返回：** 最近 200 条，按时间倒序（最新在前）。
 
 ```json
 {
   "records": [
-    { "ts": 1748880000, "amount": "932", "game": "MONEY COMING", "source": "api" },
-    ...
+    {
+      "id": "1234567890123456789",
+      "ts": 1748880000,
+      "amount": "932",
+      "game": "MONEY COMING",
+      "source": "api",
+      "discordMessageId": "1234567890123456789"
+    }
   ]
 }
 ```
+
+Redis 中出现坏 JSON 时跳过该条记录，不崩溃，不影响其余数据返回。
 
 ---
 
 ## 3. Dashboard 页面
 
 **路由：** `/dashboard/bigwin`
+**文件：** `dashboard/app/dashboard/bigwin/page.tsx`
 
-**侧边栏：** 新增「Big Win 记录」入口（Trophy 图标），插入现有三个导航项之后。
+**侧边栏：** 在 `dashboard/components/sidebar.tsx` 中新增「Big Win 记录」入口（Trophy 图标），插入现有三个导航项之后。
 
 **页面结构：**
 - 顶部：页面标题 + 右侧来源筛选下拉（全部 / 我们的Bot / 技术接口）
 - 主体：表格
   - 列：时间 / 金额 / 游戏 / 来源
+  - **时间列**：格式化为本地时间 `YYYY-MM-DD HH:mm:ss`，不展示 Unix 秒
   - 来源标签：`cron` 绿色，`api` 蓝色
 - UI 状态：加载中（转圈）/ 空状态（暂无记录）/ 出错（加载失败，请刷新）
 
@@ -92,7 +122,23 @@ ZREMRANGEBYSCORE bigwin:history 0 <ts_30days_ago>
 
 | 文件 | 操作 |
 |---|---|
-| `app/api/broadcast/bigwin/route.ts` | 在 `broadcast()` 成功后追加 Redis 写入 |
-| `app/api/broadcast/bigwin/history/route.ts` | 新建，查询接口 |
-| `app/dashboard/bigwin/page.tsx` | 新建，历史记录页面 |
-| `components/sidebar.tsx` | 新增导航项 |
+| `dashboard/app/api/broadcast/bigwin/route.ts` | 在 `broadcast()` Discord 成功后追加 Redis 写入（三个 key），写入失败不阻断响应 |
+| `dashboard/app/api/broadcast/bigwin/history/route.ts` | 新建，历史查询接口 |
+| `dashboard/app/dashboard/bigwin/page.tsx` | 新建，历史记录页面 |
+| `dashboard/components/sidebar.tsx` | 新增导航项 |
+
+---
+
+## 5. 测试覆盖
+
+| 场景 | 预期结果 |
+|---|---|
+| POST 播报成功 | 写入 `bigwin:history` 和 `bigwin:history:api` |
+| GET（cron）播报成功 | 写入 `bigwin:history` 和 `bigwin:history:cron` |
+| cooldown skipped | 不写入任何 history key |
+| Discord 发送失败 | 不写入任何 history key |
+| Redis 写入历史报错 | 播报接口仍返回成功，响应带 `recorded: false` |
+| 历史接口未登录 | 返回 401 |
+| `source=cron` 筛选 | 只返回 cron 记录 |
+| `source=api` 筛选 | 只返回 api 记录 |
+| Redis 中存在坏 JSON | 跳过该条，其余正常返回，不抛异常 |
