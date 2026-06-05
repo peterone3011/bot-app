@@ -59,14 +59,17 @@ class SubscriptionSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        current_opts = list(self.options)
         await interaction.response.defer(ephemeral=True)
         await handle_role(interaction, self.values[0])
+        # Always reset the view so the same option can be clicked again;
+        # try fresh DB data, fall back to current options if the query fails.
         try:
-            opts = await _build_options()
-            if opts:
-                await interaction.message.edit(view=RoleView(opts))
-        except Exception as e:
-            print(f"[roles] Failed to refresh view after interaction: {e}", flush=True)
+            fresh = await _build_options()
+            opts = fresh if fresh else current_opts
+        except Exception:
+            opts = current_opts
+        await interaction.message.edit(view=RoleView(opts))
 
 
 class RoleView(discord.ui.View):
