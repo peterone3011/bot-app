@@ -12,8 +12,6 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/api/embeds/:path*",
-    "/api/sites/:path*",
-    "/api/settings/:path*",
     "/api/discord/:path*",
     "/api/roles/:path*",
   ],

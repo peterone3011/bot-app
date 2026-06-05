@@ -77,6 +77,24 @@ def test_delete_message_calls_delete(client):
     client.table.return_value.delete.return_value.eq.assert_called_with("id", "abc")
 
 
+# --- load_roles ---
+
+def test_load_roles_returns_rows(client):
+    rows = [
+        {"id": "uuid-1", "label": "📢 Exclusive Updates", "description": "...", "display_order": 0},
+        {"id": "uuid-2", "label": "🎰Gaming Alerts", "description": "...", "display_order": 1},
+    ]
+    client.table.return_value.select.return_value.order.return_value.execute.return_value = make_response(rows)
+    result = db_module.load_roles()
+    assert result == rows
+    client.table.assert_called_with("roles")
+
+
+def test_load_roles_empty(client):
+    client.table.return_value.select.return_value.order.return_value.execute.return_value = make_response([])
+    assert db_module.load_roles() == []
+
+
 # --- get_config ---
 
 def test_get_config_found(client):

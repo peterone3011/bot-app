@@ -8,8 +8,7 @@ describe("middleware config", () => {
     const matcher = config.matcher as string[]
     expect(matcher).toContain("/dashboard/:path*")
     expect(matcher.some((m) => m.includes("/api/embeds"))).toBe(true)
-    expect(matcher.some((m) => m.includes("/api/sites"))).toBe(true)
-    expect(matcher.some((m) => m.includes("/api/settings"))).toBe(true)
     expect(matcher.some((m) => m.includes("/api/discord"))).toBe(true)
+    expect(matcher.some((m) => m.includes("/api/roles"))).toBe(true)
   })
 })
