@@ -13,10 +13,13 @@ import { GripVertical } from "lucide-react"
 export const dynamic = "force-dynamic"
 
 export default async function RolesPage() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("roles")
     .select("*")
     .order("display_order", { ascending: true })
+
+  if (error) console.error("[roles page] supabase error:", JSON.stringify(error))
+  console.log("[roles page] data:", JSON.stringify(data))
 
   const roles = (data ?? []) as Role[]
 
