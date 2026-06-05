@@ -18,8 +18,6 @@ _BROADCAST_TIME = datetime.time(hour=11, minute=0, tzinfo=_UTC)
 
 UPDATE_CHANNEL_ID: int = int(os.getenv("UPDATE_CHANNEL_ID", "0"))
 STAFF_CHAT_CHANNEL_ID: int = int(os.getenv("STAFF_CHAT_CHANNEL_ID", "0"))
-MOD_ROLE_ID: int = int(os.getenv("DISCORD_ADMIN_ROLE_ID", "0"))
-
 LARK_BASE = "https://open.larksuite.com/open-apis"
 LARK_APP_ID: str = os.getenv("LARK_APP_ID", "")
 LARK_APP_SECRET: str = os.getenv("LARK_APP_SECRET", "")
@@ -249,9 +247,9 @@ class UpdatesCog(commands.Cog):
     async def before_auto_post(self) -> None:
         await self.bot.wait_until_ready()
 
-    @discord.app_commands.command(name="edit_update", description="编辑已发布的 updates 消息（仅 Mod）")
+    @discord.app_commands.command(name="edit_update", description="编辑已发布的 updates 消息（仅管理员）")
     async def edit_update(self, interaction: discord.Interaction) -> None:
-        if not any(r.id == MOD_ROLE_ID for r in interaction.user.roles):
+        if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("无权限。", ephemeral=True)
             return
         await interaction.response.send_modal(EditUpdateModal())
