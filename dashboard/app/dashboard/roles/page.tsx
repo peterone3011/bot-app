@@ -18,9 +18,6 @@ export default async function RolesPage() {
     .select("*")
     .order("display_order", { ascending: true })
 
-  if (error) console.error("[roles page] supabase error:", JSON.stringify(error))
-  console.log("[roles page] data:", JSON.stringify(data))
-
   const roles = (data ?? []) as Role[]
 
   return (
