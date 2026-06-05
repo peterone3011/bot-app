@@ -15,5 +15,6 @@ export const config = {
     "/api/sites/:path*",
     "/api/settings/:path*",
     "/api/discord/:path*",
+    "/api/roles/:path*",
   ],
 }

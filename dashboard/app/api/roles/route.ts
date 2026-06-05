@@ -80,6 +80,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Body must be a JSON object" }, { status: 400 })
+  }
+
   const { label, description } = body
   if (!label || typeof label !== "string" || label.trim().length === 0) {
     return NextResponse.json({ error: "label is required" }, { status: 400 })
@@ -91,12 +95,13 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const { data: existing } = await supabase
+  const { data: existing, error: orderError } = await supabase
     .from("roles")
     .select("display_order")
     .order("display_order", { ascending: false })
     .limit(1)
 
+  if (orderError) return NextResponse.json({ error: orderError.message }, { status: 500 })
   const nextOrder = existing && existing.length > 0 ? existing[0].display_order + 1 : 0
 
   const role = {
