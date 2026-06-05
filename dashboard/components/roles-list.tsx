@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import {
   DndContext,
   closestCenter,
@@ -33,7 +33,7 @@ function SortableItem({
   role: Role
   isOnly: boolean
   onDelete: (id: string) => void
-  onEdit: (id: string, label: string, description: string) => void
+  onEdit: (id: string, label: string, description: string) => Promise<boolean>
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: role.id })
@@ -47,15 +47,15 @@ function SortableItem({
   const [description, setDescription] = useState(role.description)
   const [labelError, setLabelError] = useState("")
 
-  function handleSave() {
+  async function handleSave() {
     if (!label.trim()) return
     if (label.trim().length > MAX_LABEL) {
       setLabelError(`最多 ${MAX_LABEL} 个字符`)
       return
     }
     setLabelError("")
-    onEdit(role.id, label.trim(), description.trim())
-    setEditing(false)
+    const ok = await onEdit(role.id, label.trim(), description.trim())
+    if (ok) setEditing(false)
   }
 
   function handleCancel() {
@@ -123,10 +123,10 @@ function SortableItem({
             />
           </div>
           <div className="flex gap-1 mt-0.5">
-            <Button size="sm" variant="ghost" onClick={handleSave} title="保存">
+            <Button size="sm" variant="ghost" onClick={handleSave} title="保存" aria-label="保存">
               <Check className="h-3.5 w-3.5" />
             </Button>
-            <Button size="sm" variant="ghost" onClick={handleCancel} title="取消">
+            <Button size="sm" variant="ghost" onClick={handleCancel} title="取消" aria-label="取消">
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -148,6 +148,7 @@ function SortableItem({
               className="opacity-60 group-hover:opacity-100 transition-opacity"
               onClick={() => setEditing(true)}
               title="编辑"
+              aria-label="编辑"
             >
               <Pencil className="h-3.5 w-3.5" />
             </Button>
@@ -157,6 +158,7 @@ function SortableItem({
               className="opacity-60 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10"
               onClick={() => onDelete(role.id)}
               title="删除"
+              aria-label="删除"
               disabled={isOnly}
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -175,6 +177,7 @@ export function RolesList({ initialRoles }: { initialRoles: Role[] }) {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState("")
   const [msgKind, setMsgKind] = useState<"info" | "error">("info")
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -182,10 +185,13 @@ export function RolesList({ initialRoles }: { initialRoles: Role[] }) {
   )
 
   function flash(text: string, kind: "info" | "error" = "info", ms = 2500) {
+    if (flashTimer.current) clearTimeout(flashTimer.current)
     setMsg(text)
     setMsgKind(kind)
-    setTimeout(() => setMsg(""), ms)
+    flashTimer.current = setTimeout(() => setMsg(""), ms)
   }
+
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current) }, [])
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
@@ -212,6 +218,7 @@ export function RolesList({ initialRoles }: { initialRoles: Role[] }) {
   }
 
   async function handleAdd() {
+    if (saving) return
     if (!newLabel.trim()) return
     if (newLabel.trim().length > MAX_LABEL) {
       setNewLabelError(`最多 ${MAX_LABEL} 个字符`)
@@ -260,7 +267,7 @@ export function RolesList({ initialRoles }: { initialRoles: Role[] }) {
     }
   }
 
-  async function handleEdit(id: string, label: string, description: string) {
+  async function handleEdit(id: string, label: string, description: string): Promise<boolean> {
     try {
       const res = await fetch(`/api/roles/${id}`, {
         method: "PUT",
@@ -271,11 +278,14 @@ export function RolesList({ initialRoles }: { initialRoles: Role[] }) {
         setRoles((prev) =>
           prev.map((r) => (r.id === id ? { ...r, label, description } : r))
         )
+        return true
       } else {
         flash("保存失败，请重试", "error")
+        return false
       }
     } catch {
       flash("网络错误，请重试", "error")
+      return false
     }
   }
 
