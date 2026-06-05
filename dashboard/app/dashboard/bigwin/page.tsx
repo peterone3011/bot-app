@@ -75,7 +75,7 @@ export default function BigwinHistoryPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="cron">我们的Bot</SelectItem>
+                <SelectItem value="cron">Bot</SelectItem>
                 <SelectItem value="api">技术接口</SelectItem>
               </SelectContent>
             </Select>
