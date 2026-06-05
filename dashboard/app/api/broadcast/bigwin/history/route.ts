@@ -51,7 +51,8 @@ export async function GET(req: NextRequest) {
   const records: HistoryRecord[] = []
   for (const m of members) {
     try {
-      records.push(JSON.parse(m as string) as HistoryRecord)
+      const record = (typeof m === "string" ? JSON.parse(m) : m) as HistoryRecord
+      records.push(record)
     } catch {
       // skip corrupted entries
     }
