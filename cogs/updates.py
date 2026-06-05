@@ -258,8 +258,8 @@ class UpdatesCog(commands.Cog):
         try:
             await _write_cell_with_retry(sheet_row, "F", "发布中")
         except Exception as exc:
-            print(f"[updates] Cannot mark row {sheet_row} as 发布中, aborting: {exc}", flush=True)
-            return
+            # Best-effort guard against double-post on restart; don't abort posting.
+            print(f"[updates] Warning: could not mark row {sheet_row} as 发布中: {exc}", flush=True)
 
         file: Optional[discord.File] = None
         if image_token:
@@ -309,9 +309,20 @@ class UpdatesCog(commands.Cog):
             except Exception:
                 pass
 
-        await _write_cell_with_retry(sheet_row, "F", "已发布")
-        await _write_cell_with_retry(sheet_row, "G", str(msg.id))
         print(f"[updates] Posted row {sheet_row}, Discord message ID {msg.id}", flush=True)
+        try:
+            await _write_cell_with_retry(sheet_row, "F", "已发布")
+            await _write_cell_with_retry(sheet_row, "G", str(msg.id))
+        except Exception as exc:
+            print(f"[updates] Failed to update sheet after posting row {sheet_row}: {exc}", flush=True)
+            staff = self.bot.get_channel(STAFF_CHAT_CHANNEL_ID)
+            if isinstance(staff, discord.abc.Messageable):
+                await staff.send(
+                    f"⚠️ Updates 帖子已发出，但表格状态更新失败！\n"
+                    f"请手动将第 **{sheet_row}** 行状态改为「已发布」\n"
+                    f"Discord 消息 ID：`{msg.id}`\n"
+                    f"错误：{exc}"
+                )
 
 
 async def setup(bot: commands.Bot) -> None:
