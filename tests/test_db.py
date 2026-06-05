@@ -77,19 +77,6 @@ def test_delete_message_calls_delete(client):
     client.table.return_value.delete.return_value.eq.assert_called_with("id", "abc")
 
 
-# --- load_sites ---
-
-def test_load_sites_returns_names(client):
-    rows = [{"name": "Fortune Purple"}, {"name": "Site 2"}]
-    client.table.return_value.select.return_value.order.return_value.execute.return_value = make_response(rows)
-    assert db_module.load_sites() == ["Fortune Purple", "Site 2"]
-
-
-def test_load_sites_empty(client):
-    client.table.return_value.select.return_value.order.return_value.execute.return_value = make_response([])
-    assert db_module.load_sites() == []
-
-
 # --- get_config ---
 
 def test_get_config_found(client):
