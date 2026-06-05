@@ -159,11 +159,13 @@ async def _write_cell(sheet_row: int, col: str, value: str) -> None:
 async def _write_cell_with_retry(
     sheet_row: int, col: str, value: str, retries: int = 3
 ) -> None:
+    last_exc: Exception = RuntimeError("no attempts made")
     for attempt in range(1, retries + 1):
         try:
             await _write_cell(sheet_row, col, value)
             return
         except Exception as exc:
+            last_exc = exc
             print(
                 f"[updates] Lark write {col}{sheet_row}={value!r} "
                 f"attempt {attempt}/{retries} failed: {exc}",
@@ -171,6 +173,9 @@ async def _write_cell_with_retry(
             )
             if attempt < retries:
                 await asyncio.sleep(5)
+    raise RuntimeError(
+        f"Lark write {col}{sheet_row}={value!r} failed after {retries} retries"
+    ) from last_exc
 
 
 # ── Modal ─────────────────────────────────────────────────────────────────────
