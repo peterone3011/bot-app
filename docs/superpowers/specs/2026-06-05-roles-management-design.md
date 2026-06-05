@@ -15,13 +15,28 @@ CREATE TABLE roles (
   label         text NOT NULL,
   description   text NOT NULL DEFAULT '',
   display_order integer NOT NULL DEFAULT 0,
-  created_at    timestamptz NOT NULL DEFAULT now()
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
 );
+
+-- Keep roles in sync with updated_at on every update
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN NEW.updated_at = now(); RETURN NEW; END;
+$$;
+CREATE TRIGGER roles_set_updated_at
+  BEFORE UPDATE ON roles
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 INSERT INTO roles (label, description, display_order) VALUES
   ('📢 Exclusive Updates', 'Access our exclusive updates channel', 0),
   ('🎰Gaming Alerts',      'Get notified for jackpots and big wins', 1);
 
+-- RLS: enable and deny anonymous access; service role bypasses RLS implicitly
+ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "deny anon" ON roles FOR ALL TO anon USING (false);
+
+-- Prerequisite: deploy dashboard + bot code changes before running this
 DROP TABLE sites;
 ```
 
@@ -29,15 +44,23 @@ DROP TABLE sites;
 
 | File | Description |
 |---|---|
-| `app/api/roles/route.ts` | GET list, POST add, PUT reorder |
+| `app/api/roles/route.ts` | GET list (auth required), POST add, PUT reorder |
 | `app/api/roles/[id]/route.ts` | PUT rename, DELETE |
 | `app/dashboard/roles/page.tsx` | 身份组管理 page (server component) |
 | `components/roles-list.tsx` | Drag-drop role list (client component) |
+| `__tests__/roles-list.test.tsx` | Unit tests mirroring existing sites-list tests |
 
-All modelled directly on the existing `sites` equivalents. Key differences:
-- Table name: `roles`
-- Field: `label` instead of `name`
-- Delete confirm text updated to mention roles, not sites
+All modelled on the existing `sites` equivalents. Key differences:
+- Table name: `roles`; field: `label` instead of `name`
+- Delete confirm text references roles, not sites
+
+**PUT reorder payload** (same as `/api/sites` PUT):
+```json
+[{ "id": "<uuid>", "display_order": 0 }, { "id": "<uuid>", "display_order": 1 }]
+```
+Full array of all roles with their new `display_order` values. API does a bulk `upsert` on conflict by `id`.
+
+**GET /api/roles authentication**: required (session check), consistent with `/api/sites`.
 
 ## Dashboard — Files to Delete
 
@@ -52,29 +75,28 @@ All modelled directly on the existing `sites` equivalents. Key differences:
 
 ## Dashboard — Files to Modify
 
-**`lib/types.ts`**: replace `Site` interface with `Role` (rename `name` → `label`, add `description`); remove `Config` interface.
+**`lib/types.ts`**: replace `Site` interface with `Role` (`label` instead of `name`, add `description` and `updated_at`); remove `Config` interface.
 
 **`components/sidebar.tsx`**: replace `/dashboard/sites` nav item with `/dashboard/roles` (label: 身份组管理, icon: Users); remove `/dashboard/settings` nav item.
 
 ## Bot Changes
 
-**`cogs/db.py`**: add `load_roles()` that returns `list[dict]` from `roles` table ordered by `display_order`; remove `load_sites()`.
+**`cogs/db.py`**:
+- Add `load_roles() -> list[dict]` — reads `id`, `label`, `description`, `display_order` from `roles` ordered by `display_order`
+- Remove `load_sites()`
 
 **`cogs/roles.py`**:
 - Remove module-level `SUBSCRIPTION_ROLES` constant
-- In `_post_role_embeds()`: call `get_config("roles_channel_name", "🔔roles")` → replace with hardcoded `"🔔roles"`
-- Build `discord.SelectOption` list dynamically from `load_roles()` each time `_post_role_embeds()` runs
-- `SubscriptionSelect.__init__` still accepts a pre-built options list (passed in from `_post_role_embeds`)
-- If DB returns empty list, log warning and skip posting
+- Remove `get_config("roles_channel_name", ...)` call; hardcode `"🔔roles"` directly
+- In `_post_role_embeds()`: call `load_roles()` fresh each time to build the `discord.SelectOption` list
+  - If `load_roles()` raises an exception: log the error and return early (bot keeps running, existing Discord message unchanged)
+  - If `load_roles()` returns an empty list: log a warning and return early (same behaviour)
+- `SubscriptionSelect.__init__` accepts an `options` list parameter (passed in from `_post_role_embeds`)
 
-## Behaviour After Change
-
-- Adding/removing a role in the dashboard takes effect on next bot restart (or next `on_ready`)
-- No bot code changes required to add/remove roles
-- Channel name "🔔roles" is hardcoded; no longer configurable via dashboard (acceptable — channel has never been renamed)
+**Effect timing**: `_post_role_embeds()` is called on `on_ready` and `cog_load`, both of which fire on bot restart or reconnect. Role changes in the dashboard take effect on the bot's next restart or Discord reconnect — no caching, each call queries the DB fresh.
 
 ## Out of Scope
 
-- Hot-reload roles without bot restart
+- Hot-reload roles without reconnect
 - Per-role emoji icon management in dashboard
 - Description field editable in dashboard (stored in DB, set at seed time only)
