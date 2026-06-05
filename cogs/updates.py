@@ -254,6 +254,37 @@ class UpdatesCog(commands.Cog):
             return
         await interaction.response.send_modal(EditUpdateModal())
 
+    @discord.app_commands.command(name="edit_update_image", description="替换已发布的 updates 消息图片（仅管理员）")
+    @discord.app_commands.describe(
+        message_id="消息 ID（右键消息 → 复制消息 ID）",
+        image="新图片",
+    )
+    async def edit_update_image(
+        self,
+        interaction: discord.Interaction,
+        message_id: str,
+        image: discord.Attachment,
+    ) -> None:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("无权限。", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        try:
+            channel = interaction.client.get_channel(UPDATE_CHANNEL_ID)
+            if not isinstance(channel, discord.abc.Messageable):
+                await interaction.followup.send("找不到 updates 频道。", ephemeral=True)
+                return
+            msg = await channel.fetch_message(int(message_id.strip()))
+            image_bytes = await image.read()
+            await msg.edit(attachments=[discord.File(io.BytesIO(image_bytes), filename=image.filename)])
+            await interaction.followup.send("图片已更新。", ephemeral=True)
+        except ValueError:
+            await interaction.followup.send("消息 ID 格式不正确，请填入纯数字。", ephemeral=True)
+        except discord.NotFound:
+            await interaction.followup.send("找不到该消息，请确认 ID 是否正确。", ephemeral=True)
+        except Exception as exc:
+            await interaction.followup.send(f"更新失败：{exc}", ephemeral=True)
+
     async def _do_post(self) -> None:
         try:
             rows = await _read_sheet()
