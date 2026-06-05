@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { rateLimitCheck } from "@/lib/rate-limit"
 
+export const dynamic = "force-dynamic"
+
 const MAX_LABEL_LENGTH = 100
 
 export async function PUT(
@@ -20,6 +22,10 @@ export async function PUT(
     body = await req.json()
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+  }
+
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Body must be a JSON object" }, { status: 400 })
   }
 
   const updates: Record<string, unknown> = {}
