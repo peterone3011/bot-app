@@ -25,6 +25,10 @@ LARK_APP_ID: str = os.getenv("LARK_APP_ID", "")
 LARK_APP_SECRET: str = os.getenv("LARK_APP_SECRET", "")
 LARK_SPREADSHEET_TOKEN: str = os.getenv("LARK_SPREADSHEET_TOKEN", "")
 LARK_SHEET_ID: str = os.getenv("LARK_SHEET_ID", "")
+LARK_NOTIFY_CHAT_ID: str = os.getenv("LARK_NOTIFY_CHAT_ID", "")
+
+_MAX_LARK_RETRY_SECONDS = 12 * 3600  # 12 hours
+_LARK_RETRY_INTERVAL = 60            # retry every 60s
 
 REACTION_POOL = [
     "🎉", "🎊", "🔥", "💜", "✨", "🚀", "💰", "🎰",
@@ -104,6 +108,19 @@ def find_pending_row(
     return None
 
 # ── Lark API client ───────────────────────────────────────────────────────────
+
+async def _send_lark_dm(text: str) -> None:
+    if not LARK_NOTIFY_CHAT_ID:
+        return
+    token = await _get_lark_token()
+    async with aiohttp.ClientSession() as session:
+        await session.post(
+            f"{LARK_BASE}/im/v1/messages?receive_id_type=chat_id",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"receive_id": LARK_NOTIFY_CHAT_ID, "msg_type": "text",
+                  "content": f'{{"text":"{text}"}}'},
+        )
+
 
 async def _get_lark_token() -> str:
     async with aiohttp.ClientSession() as session:
@@ -310,19 +327,25 @@ class UpdatesCog(commands.Cog):
                 pass
 
         print(f"[updates] Posted row {sheet_row}, Discord message ID {msg.id}", flush=True)
-        try:
-            await _write_cell_with_retry(sheet_row, "F", "已发布")
-            await _write_cell_with_retry(sheet_row, "G", str(msg.id))
-        except Exception as exc:
-            print(f"[updates] Failed to update sheet after posting row {sheet_row}: {exc}", flush=True)
-            staff = self.bot.get_channel(STAFF_CHAT_CHANNEL_ID)
-            if isinstance(staff, discord.abc.Messageable):
-                await staff.send(
-                    f"⚠️ Updates 帖子已发出，但表格状态更新失败！\n"
-                    f"请手动将第 **{sheet_row}** 行状态改为「已发布」\n"
-                    f"Discord 消息 ID：`{msg.id}`\n"
-                    f"错误：{exc}"
+        elapsed = 0
+        while True:
+            try:
+                await _write_cell_with_retry(sheet_row, "F", "已发布")
+                break
+            except Exception as exc:
+                elapsed += _LARK_RETRY_INTERVAL
+                print(
+                    f"[updates] Lark write 已发布 failed (elapsed {elapsed}s): {exc}",
+                    flush=True,
                 )
+                if elapsed >= _MAX_LARK_RETRY_SECONDS:
+                    msg_text = (
+                        f"⚠️ Updates 表格状态更新失败超过 12 小时，请手动将第 {sheet_row} 行改为「已发布」"
+                    )
+                    print(f"[updates] {msg_text}", flush=True)
+                    await _send_lark_dm(msg_text)
+                    break
+                await asyncio.sleep(_LARK_RETRY_INTERVAL)
 
 
 async def setup(bot: commands.Bot) -> None:
