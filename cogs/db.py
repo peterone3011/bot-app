@@ -61,12 +61,23 @@ async def adelete_message(msg_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Sites
+# Roles
 # ---------------------------------------------------------------------------
 
-def load_sites() -> list[str]:
-    rows = get_client().table("sites").select("name").order("display_order").execute().data
-    return [row["name"] for row in rows]
+def load_roles() -> list[dict]:
+    rows = (
+        get_client()
+        .table("roles")
+        .select("id, label, description, display_order")
+        .order("display_order")
+        .execute()
+        .data
+    )
+    return rows
+
+
+async def aload_roles() -> list[dict]:
+    return await asyncio.to_thread(load_roles)
 
 
 # ---------------------------------------------------------------------------

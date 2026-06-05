@@ -15,14 +15,11 @@ export interface Message {
   color: number | null
 }
 
-export interface Site {
+export interface Role {
   id: string
-  name: string
+  label: string
+  description: string
   display_order: number
   created_at: string
-}
-
-export interface Config {
-  key: string
-  value: string
+  updated_at: string
 }

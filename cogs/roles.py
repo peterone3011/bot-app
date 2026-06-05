@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 
-from cogs.db import get_config
+from cogs.db import aload_roles
 
 EMBED_TITLE = "Select Your Notifications"
 EMBED_DESCRIPTION = (
@@ -9,23 +9,24 @@ EMBED_DESCRIPTION = (
     "Click once to **subscribe** — click again to **unsubscribe**."
 )
 
-SUBSCRIPTION_ROLES = [
-    discord.SelectOption(
-        label="📢 Exclusive Updates",
-        value="📢 Exclusive Updates",
-        description="Access our exclusive updates channel",
-    ),
-    discord.SelectOption(
-        label="🎰Gaming Alerts",
-        value="🎰Gaming Alerts",
-        description="Get notified for jackpots and big wins",
-    ),
-]
+CHANNEL_NAME = "🔔roles"
+
+
+async def _build_options() -> list[discord.SelectOption]:
+    roles = await aload_roles()
+    return [
+        discord.SelectOption(
+            label=r["label"],
+            value=r["label"],
+            description=r.get("description", ""),
+        )
+        for r in roles
+    ]
 
 
 async def handle_role(interaction: discord.Interaction, selected: str) -> None:
     member = interaction.user
-    guild  = interaction.guild
+    guild = interaction.guild
 
     role = discord.utils.get(guild.roles, name=selected)
     if not role:
@@ -48,40 +49,57 @@ async def handle_role(interaction: discord.Interaction, selected: str) -> None:
 
 
 class SubscriptionSelect(discord.ui.Select):
-    def __init__(self) -> None:
+    def __init__(self, options: list[discord.SelectOption]) -> None:
         super().__init__(
             placeholder="Subscribe / unsubscribe to notifications...",
             min_values=1,
             max_values=1,
-            options=SUBSCRIPTION_ROLES,
+            options=options,
             custom_id="subscription_role_select",
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         await handle_role(interaction, self.values[0])
-        # Reset the select so the same option can be clicked again next time
-        await interaction.message.edit(view=RoleView())
+        try:
+            opts = await _build_options()
+            if opts:
+                await interaction.message.edit(view=RoleView(opts))
+        except Exception as e:
+            print(f"[roles] Failed to refresh view after interaction: {e}", flush=True)
 
 
 class RoleView(discord.ui.View):
-    def __init__(self) -> None:
+    def __init__(self, options: list[discord.SelectOption]) -> None:
         super().__init__(timeout=None)
-        self.add_item(SubscriptionSelect())
+        self.add_item(SubscriptionSelect(options))
 
 
 class RolesCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        bot.add_view(RoleView())
+        # Register persistent view handler for interactions on existing Discord messages.
+        # A single placeholder option is enough to register the custom_id;
+        # real options are loaded from DB in _post_role_embeds().
+        bot.add_view(RoleView([discord.SelectOption(label="loading", value="loading")]))
+
+    def cog_unload(self) -> None:
+        pass
 
     async def _post_role_embeds(self) -> None:
-        channel_name = get_config("roles_channel_name", "🔔roles")
+        try:
+            opts = await _build_options()
+        except Exception as e:
+            print(f"[roles] Failed to load roles from DB: {e}", flush=True)
+            return
+        if not opts:
+            print("[roles] No roles found in DB, skipping embed update", flush=True)
+            return
+
         for guild in self.bot.guilds:
-            channel = discord.utils.get(guild.text_channels, name=channel_name)
+            channel = discord.utils.get(guild.text_channels, name=CHANNEL_NAME)
             if not channel:
                 continue
-            # Find any existing bot embed and update it; post fresh if none found
             existing: discord.Message | None = None
             async for msg in channel.history(limit=50):
                 if msg.author == self.bot.user and msg.embeds:
@@ -94,11 +112,11 @@ class RolesCog(commands.Cog):
             )
             try:
                 if existing:
-                    await existing.edit(embed=embed, view=RoleView())
+                    await existing.edit(embed=embed, view=RoleView(opts))
                 else:
-                    await channel.send(embed=embed, view=RoleView())
+                    await channel.send(embed=embed, view=RoleView(opts))
             except Exception as e:
-                print(f"[roles] Failed to post/update role embed: {e}")
+                print(f"[roles] Failed to post/update role embed: {e}", flush=True)
 
     async def cog_load(self) -> None:
         if self.bot.is_ready():
