@@ -159,7 +159,7 @@ async def _download_image(file_token: str) -> bytes:
 async def _write_cell(sheet_row: int, col: str, value: str) -> None:
     """Write a single cell. sheet_row is 1-based."""
     token = await _get_lark_token()
-    range_str = f"{LARK_SHEET_ID}!{col}{sheet_row}"
+    range_str = f"{LARK_SHEET_ID}!{col}{sheet_row}:{col}{sheet_row}"
     async with aiohttp.ClientSession() as session:
         async with session.put(
             f"{LARK_BASE}/sheets/v2/spreadsheets/{LARK_SPREADSHEET_TOKEN}/values",
