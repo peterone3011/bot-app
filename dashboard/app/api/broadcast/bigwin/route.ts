@@ -49,9 +49,9 @@ const GAME_NAMES = [
   "3SUPER HOT CHILLIES",
 ]
 
-/** 随机生成金额：1,000–8,000 之间的整数 + .0 或 .5 */
+/** 随机生成金额：800–3,000 之间的整数 + .0 或 .5 */
 function randomAmount(): string {
-  const integer = Math.floor(Math.random() * 7001) + 1000
+  const integer = Math.floor(Math.random() * 2201) + 800
   const decimal = Math.random() < 0.5 ? ".0" : ".5"
   return integer.toLocaleString("en-US") + decimal
 }
