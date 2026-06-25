@@ -283,6 +283,17 @@ class UpdatesCog(commands.Cog):
         except Exception as exc:
             await interaction.followup.send(f"更新失败：{exc}", ephemeral=True)
 
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        if message.channel.id != UPDATE_CHANNEL_ID:
+            return
+        emojis = ["🍀"] + random.sample(REACTION_POOL, 9)
+        for emoji in emojis:
+            try:
+                await message.add_reaction(emoji)
+            except Exception:
+                pass
+
     async def _do_post(self) -> None:
         try:
             rows = await _read_sheet()
@@ -346,12 +357,6 @@ class UpdatesCog(commands.Cog):
             print(f"[updates] Discord send failed: {exc}", flush=True)
             await _write_cell_with_retry(sheet_row, "F", "待发布")
             return
-
-        for emoji in random.sample(REACTION_POOL, 10):
-            try:
-                await msg.add_reaction(emoji)
-            except Exception:
-                pass
 
         print(f"[updates] Posted row {sheet_row}, Discord message ID {msg.id}", flush=True)
         try:
