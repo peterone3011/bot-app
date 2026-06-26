@@ -38,13 +38,13 @@ def test_extract_text_skips_non_dict():
 
 # ── find_pending_record ───────────────────────────────────────────────────────
 
-def test_find_pending_record_due_today():
+def test_find_pending_record_due_today_not_sent_yet():
+    # record dated today → sent tomorrow midnight, not today
     result = upd.find_pending_record([_rec(ts=_TS_TODAY)], today=_TODAY)
-    assert result is not None
-    record_id, fields = result
-    assert record_id == "recABC"
+    assert result is None
 
 def test_find_pending_record_past_date():
+    # record dated yesterday or earlier → sent at today's midnight run
     result = upd.find_pending_record([_rec(ts=_TS_PAST)], today=_TODAY)
     assert result is not None
 

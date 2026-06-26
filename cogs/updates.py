@@ -77,7 +77,7 @@ def find_pending_record(
             record_date = datetime.datetime.fromtimestamp(int(date_ts) / 1000, tz=_BJT).date()
         except (ValueError, TypeError):
             continue
-        if record_date <= today:
+        if record_date < today:
             return (rec["record_id"], fields)
     return None
 
