@@ -81,3 +81,7 @@ class AutoRoleCog(commands.Cog):
                 f"total={self._role_count}/{AUTO_ROLE_CAP}",
                 flush=True,
             )
+
+
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(AutoRoleCog(bot))
