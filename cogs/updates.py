@@ -13,8 +13,7 @@ from discord.ext import commands, tasks
 
 _BJT = datetime.timezone(datetime.timedelta(hours=8))
 _UTC = datetime.timezone.utc
-_POST_WEEKDAYS = {1, 3, 5}  # Tuesday=1, Thursday=3, Saturday=5
-_BROADCAST_TIME = datetime.time(hour=11, minute=0, tzinfo=_UTC)
+_BROADCAST_TIME = datetime.time(hour=16, minute=0, tzinfo=_UTC)  # 00:00 BJT
 
 UPDATE_CHANNEL_ID: int = int(os.getenv("UPDATE_CHANNEL_ID", "0"))
 STAFF_CHAT_CHANNEL_ID: int = int(os.getenv("STAFF_CHAT_CHANNEL_ID", "0"))
@@ -217,8 +216,6 @@ class UpdatesCog(commands.Cog):
 
     @tasks.loop(time=[_BROADCAST_TIME])
     async def auto_post(self) -> None:
-        if datetime.datetime.now(_UTC).weekday() not in _POST_WEEKDAYS:
-            return
         await self._do_post()
 
     @auto_post.before_loop
