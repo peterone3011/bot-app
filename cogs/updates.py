@@ -24,8 +24,6 @@ LARK_NOTIFY_CHAT_ID: str = os.getenv("LARK_NOTIFY_CHAT_ID", "")
 
 BITABLE_APP_TOKEN: str = os.getenv("BITABLE_APP_TOKEN", "IPG2bxK0IanGwksBqVljigsMpcb")
 BITABLE_TABLE_ID: str = os.getenv("BITABLE_TABLE_ID", "tble5kqGbD4P0aHy")
-UPDATE_BUTTON_URL: str = os.getenv("UPDATE_BUTTON_URL", "https://fortunepurple.com/?pixelType=6&channelId=7")
-
 # Bitable field IDs
 _FLD_DATE = "flduHQ5WXI"
 _FLD_CONTENT = "fldXByOoKH"
@@ -293,15 +291,12 @@ class UpdatesCog(commands.Cog):
                     print(f"[updates] Image download failed for {record_id}, will retry: {exc}", flush=True)
                     continue
 
-            view = discord.ui.View()
-            view.add_item(discord.ui.Button(label="🎰 Play Now", url=UPDATE_BUTTON_URL))
-
             # Send to Discord; skip on failure (status unchanged → retried next poll)
             try:
                 if file:
-                    msg = await channel.send(content=content, file=file, view=view)
+                    msg = await channel.send(content=content, file=file)
                 else:
-                    msg = await channel.send(content=content, view=view)
+                    msg = await channel.send(content=content)
             except Exception as exc:
                 print(f"[updates] Discord send failed for {record_id}: {exc}", flush=True)
                 continue
