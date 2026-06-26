@@ -13,7 +13,7 @@ from discord.ext import commands, tasks
 
 _BJT = datetime.timezone(datetime.timedelta(hours=8))
 _UTC = datetime.timezone.utc
-_BROADCAST_TIME = datetime.time(hour=16, minute=0, tzinfo=_UTC)  # 00:00 BJT
+_POLL_MINUTES = 5
 
 UPDATE_CHANNEL_ID: int = int(os.getenv("UPDATE_CHANNEL_ID", "0"))
 STAFF_CHAT_CHANNEL_ID: int = int(os.getenv("STAFF_CHAT_CHANNEL_ID", "0"))
@@ -24,6 +24,7 @@ LARK_NOTIFY_CHAT_ID: str = os.getenv("LARK_NOTIFY_CHAT_ID", "")
 
 BITABLE_APP_TOKEN: str = os.getenv("BITABLE_APP_TOKEN", "IPG2bxK0IanGwksBqVljigsMpcb")
 BITABLE_TABLE_ID: str = os.getenv("BITABLE_TABLE_ID", "tble5kqGbD4P0aHy")
+UPDATE_BUTTON_URL: str = os.getenv("UPDATE_BUTTON_URL", "https://fortunepurple.com/?pixelType=6&channelId=7")
 
 # Bitable field IDs
 _FLD_DATE = "flduHQ5WXI"
@@ -32,7 +33,6 @@ _FLD_IMAGE = "fld8A6l5dt"
 _FLD_STATUS = "fldph5tFB3"
 
 _STATUS_PENDING = "待发布"
-_STATUS_POSTING = "发布中"
 _STATUS_DONE = "已发布"
 
 REACTION_POOL = [
@@ -54,32 +54,21 @@ def _extract_text(value) -> str:
     return str(value)
 
 
-def find_pending_record(
-    records: list,
-    today: Optional[datetime.date] = None,
-) -> Optional[tuple]:
-    """Return (record_id, fields) for the first record that is 待发布 and due today or earlier.
-
-    Args:
-        records: list of record dicts from Bitable API (field_id_as_field_name=true).
-        today: date to compare against; defaults to current BJT date.
-    """
+def _is_due(rec: dict, today: Optional[datetime.date] = None) -> bool:
+    """Return True if a record is 待发布 and its date has already passed (date < today BJT)."""
     if today is None:
         today = datetime.datetime.now(_BJT).date()
-    for rec in records:
-        fields = rec.get("fields", {})
-        if fields.get(_FLD_STATUS) != _STATUS_PENDING:
-            continue
-        date_ts = fields.get(_FLD_DATE)
-        if not date_ts:
-            continue
-        try:
-            record_date = datetime.datetime.fromtimestamp(int(date_ts) / 1000, tz=_BJT).date()
-        except (ValueError, TypeError):
-            continue
-        if record_date < today:
-            return (rec["record_id"], fields)
-    return None
+    fields = rec.get("fields", {})
+    if fields.get(_FLD_STATUS) != _STATUS_PENDING:
+        return False
+    date_ts = fields.get(_FLD_DATE)
+    if not date_ts:
+        return False
+    try:
+        record_date = datetime.datetime.fromtimestamp(int(date_ts) / 1000, tz=_BJT).date()
+    except (ValueError, TypeError):
+        return False
+    return record_date < today
 
 
 # ── Lark API client ───────────────────────────────────────────────────────────
@@ -214,7 +203,7 @@ class UpdatesCog(commands.Cog):
     def cog_unload(self) -> None:
         self.auto_post.cancel()
 
-    @tasks.loop(time=[_BROADCAST_TIME])
+    @tasks.loop(minutes=_POLL_MINUTES)
     async def auto_post(self) -> None:
         await self._do_post()
 
@@ -278,70 +267,54 @@ class UpdatesCog(commands.Cog):
             print(f"[updates] Failed to read Bitable: {exc}", flush=True)
             return
 
-        result = find_pending_record(records)
-        if result is None:
-            print("[updates] No pending record found", flush=True)
+        due = [r for r in records if _is_due(r)]
+        if not due:
             return
-
-        record_id, fields = result
-        content = _extract_text(fields.get(_FLD_CONTENT))
-        attachments = fields.get(_FLD_IMAGE) or []
-        image_url = attachments[0]["url"] if attachments else None
-
-        try:
-            await _update_record_status_with_retry(record_id, _STATUS_POSTING)
-        except Exception as exc:
-            print(f"[updates] Warning: could not mark {record_id} as 发布中: {exc}", flush=True)
-
-        file: Optional[discord.File] = None
-        if image_url:
-            for attempt in range(1, 4):
-                try:
-                    image_bytes = await _download_bitable_image(image_url)
-                    file = discord.File(io.BytesIO(image_bytes), filename="update.jpg")
-                    break
-                except Exception as exc:
-                    print(
-                        f"[updates] Image download attempt {attempt}/3 failed: {exc}",
-                        flush=True,
-                    )
-                    if attempt < 3:
-                        await asyncio.sleep(15)
-
-            if file is None:
-                await _update_record_status_with_retry(record_id, _STATUS_PENDING)
-                staff = self.bot.get_channel(STAFF_CHAT_CHANNEL_ID)
-                if isinstance(staff, discord.abc.Messageable):
-                    await staff.send(
-                        f"⚠️ Updates 自动发布失败：图片下载重试 3 次均失败，请手动处理。\n"
-                        f"Record ID {record_id} 已恢复为「待发布」。"
-                    )
-                print(f"[updates] Aborted {record_id}: image unavailable", flush=True)
-                return
 
         channel = self.bot.get_channel(UPDATE_CHANNEL_ID)
         if not isinstance(channel, discord.abc.Messageable):
             print(f"[updates] UPDATE_CHANNEL_ID {UPDATE_CHANNEL_ID} not found", flush=True)
-            await _update_record_status_with_retry(record_id, _STATUS_PENDING)
             return
 
-        try:
-            if file:
-                msg = await channel.send(content=content, file=file)
-            else:
-                msg = await channel.send(content=content)
-        except Exception as exc:
-            print(f"[updates] Discord send failed: {exc}", flush=True)
-            await _update_record_status_with_retry(record_id, _STATUS_PENDING)
-            return
+        for rec in due:
+            record_id = rec["record_id"]
+            fields = rec["fields"]
+            content = _extract_text(fields.get(_FLD_CONTENT))
+            attachments = fields.get(_FLD_IMAGE) or []
+            image_url = attachments[0]["url"] if attachments else None
 
-        print(f"[updates] Posted {record_id}, Discord message ID {msg.id}", flush=True)
-        try:
-            await _update_record_status_with_retry(record_id, _STATUS_DONE)
-        except Exception as exc:
-            msg_text = f"⚠️ Updates 表格状态更新失败，请手动将 record {record_id} 改为「已发布」"
-            print(f"[updates] {msg_text}: {exc}", flush=True)
-            await _send_lark_dm(msg_text)
+            # Download image; skip record and retry next poll on failure
+            file: Optional[discord.File] = None
+            if image_url:
+                try:
+                    image_bytes = await _download_bitable_image(image_url)
+                    file = discord.File(io.BytesIO(image_bytes), filename="update.jpg")
+                except Exception as exc:
+                    print(f"[updates] Image download failed for {record_id}, will retry: {exc}", flush=True)
+                    continue
+
+            view = discord.ui.View()
+            view.add_item(discord.ui.Button(label="🎰 Play Now", url=UPDATE_BUTTON_URL))
+
+            # Send to Discord; skip on failure (status unchanged → retried next poll)
+            try:
+                if file:
+                    msg = await channel.send(content=content, file=file, view=view)
+                else:
+                    msg = await channel.send(content=content, view=view)
+            except Exception as exc:
+                print(f"[updates] Discord send failed for {record_id}: {exc}", flush=True)
+                continue
+
+            print(f"[updates] Posted {record_id}, Discord message ID {msg.id}", flush=True)
+
+            # Write 已发布; retry 3×, log on persistent failure (message already sent)
+            try:
+                await _update_record_status_with_retry(record_id, _STATUS_DONE)
+            except Exception as exc:
+                note = f"⚠️ 状态回写失败，请手动将 record {record_id} 改为「已发布」（消息已发出）"
+                print(f"[updates] {note}: {exc}", flush=True)
+                await _send_lark_dm(note)
 
 
 async def setup(bot: commands.Bot) -> None:

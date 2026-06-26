@@ -9,7 +9,7 @@ _TS_PAST   = 1779062400000  # 2026-05-18 00:00 UTC
 _TS_FUTURE = 1780531200000  # 2026-06-04 00:00 UTC
 
 
-def _rec(ts=_TS_TODAY, status="待发布", content="text", has_image=False):
+def _rec(ts=_TS_PAST, status="待发布", content="text", has_image=False):
     fields = {
         upd._FLD_DATE: str(ts),
         upd._FLD_STATUS: status,
@@ -36,38 +36,35 @@ def test_extract_text_skips_non_dict():
     assert upd._extract_text(["a", {"text": "b"}]) == "b"
 
 
-# ── find_pending_record ───────────────────────────────────────────────────────
+# ── _is_due ───────────────────────────────────────────────────────────────────
 
-def test_find_pending_record_due_today_not_sent_yet():
-    # record dated today → sent tomorrow midnight, not today
-    result = upd.find_pending_record([_rec(ts=_TS_TODAY)], today=_TODAY)
-    assert result is None
+def test_is_due_past_date():
+    assert upd._is_due(_rec(ts=_TS_PAST), today=_TODAY) is True
 
-def test_find_pending_record_past_date():
-    # record dated yesterday or earlier → sent at today's midnight run
-    result = upd.find_pending_record([_rec(ts=_TS_PAST)], today=_TODAY)
-    assert result is not None
+def test_is_due_today_not_yet():
+    # record dated today → not due until tomorrow's poll
+    assert upd._is_due(_rec(ts=_TS_TODAY), today=_TODAY) is False
 
-def test_find_pending_record_future_skipped():
-    result = upd.find_pending_record([_rec(ts=_TS_FUTURE)], today=_TODAY)
-    assert result is None
+def test_is_due_future_skipped():
+    assert upd._is_due(_rec(ts=_TS_FUTURE), today=_TODAY) is False
 
-def test_find_pending_record_skips_published():
-    result = upd.find_pending_record([_rec(status="已发布")], today=_TODAY)
-    assert result is None
+def test_is_due_skips_published():
+    assert upd._is_due(_rec(status="已发布"), today=_TODAY) is False
 
-def test_find_pending_record_skips_posting():
-    result = upd.find_pending_record([_rec(status="发布中")], today=_TODAY)
-    assert result is None
-
-def test_find_pending_record_returns_first():
-    records = [_rec(ts=_TS_PAST), _rec(ts=_TS_TODAY)]
-    record_id, _ = upd.find_pending_record(records, today=_TODAY)
-    assert record_id == "recABC"
-
-def test_find_pending_record_empty():
-    assert upd.find_pending_record([], today=_TODAY) is None
-
-def test_find_pending_record_missing_date():
+def test_is_due_skips_missing_date():
     rec = {"record_id": "recX", "fields": {upd._FLD_STATUS: "待发布"}}
-    assert upd.find_pending_record([rec], today=_TODAY) is None
+    assert upd._is_due(rec, today=_TODAY) is False
+
+def test_is_due_invalid_timestamp():
+    rec = _rec()
+    rec["fields"][upd._FLD_DATE] = "not-a-number"
+    assert upd._is_due(rec, today=_TODAY) is False
+
+def test_is_due_multiple_records_filtered():
+    records = [
+        _rec(ts=_TS_PAST, status="待发布"),
+        _rec(ts=_TS_PAST, status="已发布"),
+        _rec(ts=_TS_FUTURE, status="待发布"),
+    ]
+    due = [r for r in records if upd._is_due(r, today=_TODAY)]
+    assert len(due) == 1
