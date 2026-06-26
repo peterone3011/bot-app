@@ -379,6 +379,17 @@ class ScheduleModal(discord.ui.Modal, title="Set Send Time"):
 # Buttons
 # ---------------------------------------------------------------------------
 
+async def _resolve_channel(interaction: discord.Interaction, channel_id: int):
+    """Get a channel from cache, falling back to a fetch if not cached."""
+    channel = interaction.guild.get_channel(channel_id)
+    if channel is None:
+        try:
+            channel = await interaction.guild.fetch_channel(channel_id)
+        except (discord.NotFound, discord.Forbidden):
+            pass
+    return channel
+
+
 class SendNowButton(discord.ui.Button):
     def __init__(self, msg_id: str):
         super().__init__(label="Send Now", style=discord.ButtonStyle.success)
@@ -386,7 +397,7 @@ class SendNowButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         msg = await aget_message(self.msg_id)
-        channel = interaction.guild.get_channel(msg["channel_id"])
+        channel = await _resolve_channel(interaction, msg["channel_id"])
         if channel is None:
             await interaction.response.send_message(
                 content="❌ Target channel not found.", ephemeral=True,
@@ -450,7 +461,7 @@ class SaveChangesButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         draft = await aget_message(self.msg_id)
-        channel = interaction.guild.get_channel(draft["channel_id"])
+        channel = await _resolve_channel(interaction, draft["channel_id"])
         if channel is None:
             await interaction.response.send_message("❌ Channel not found.", ephemeral=True)
             return
@@ -715,6 +726,30 @@ class EmbedBuilderCog(commands.Cog):
     async def before_send_loop(self):
         await self.bot.wait_until_ready()
 
+    @app_commands.command(name="emojis", description="List server emojis in copy-paste format for embed modals")
+    @app_commands.guild_only()
+    async def emojis_cmd(self, interaction: discord.Interaction):
+        emojis = interaction.guild.emojis
+        if not emojis:
+            await interaction.response.send_message("No custom emojis in this server.", ephemeral=True)
+            return
+        lines = []
+        for e in sorted(emojis, key=lambda x: x.name):
+            fmt = f"<a:{e.name}:{e.id}>" if e.animated else f"<:{e.name}:{e.id}>"
+            lines.append(f"{e} `{fmt}` — :{e.name}:")
+        # Split into chunks ≤ 2000 chars
+        chunks, chunk = [], []
+        for line in lines:
+            if sum(len(l) + 1 for l in chunk) + len(line) > 1900:
+                chunks.append("\n".join(chunk))
+                chunk = []
+            chunk.append(line)
+        if chunk:
+            chunks.append("\n".join(chunk))
+        await interaction.response.send_message(chunks[0], ephemeral=True)
+        for extra in chunks[1:]:
+            await interaction.followup.send(extra, ephemeral=True)
+
     @app_commands.command(name="embed", description="Build and send a rich embed message")
     @app_commands.guild_only()
     async def embed_cmd(self, interaction: discord.Interaction):
@@ -740,7 +775,7 @@ class EmbedBuilderCog(commands.Cog):
             await interaction.followup.send("❌ Invalid message link.")
             return
         channel_id, message_id = result
-        channel = interaction.guild.get_channel(channel_id)
+        channel = await _resolve_channel(interaction, channel_id)
         if channel is None:
             await interaction.followup.send("❌ Channel not found.")
             return
