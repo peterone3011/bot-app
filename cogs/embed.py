@@ -209,9 +209,10 @@ class TitleModal(discord.ui.Modal, title="Update Title"):
         label="Title", max_length=256, required=False, placeholder="Leave blank to clear",
     )
 
-    def __init__(self, msg_id: str):
+    def __init__(self, msg_id: str, default: str = ""):
         super().__init__()
         self.msg_id = msg_id
+        self.value_input.default = default
 
     async def on_submit(self, interaction: discord.Interaction):
         msg = await aget_message(self.msg_id)
@@ -228,9 +229,10 @@ class DescriptionModal(discord.ui.Modal, title="Update Description"):
         max_length=4000, required=False, placeholder="Leave blank to clear",
     )
 
-    def __init__(self, msg_id: str):
+    def __init__(self, msg_id: str, default: str = ""):
         super().__init__()
         self.msg_id = msg_id
+        self.value_input.default = default
 
     async def on_submit(self, interaction: discord.Interaction):
         msg = await aget_message(self.msg_id)
@@ -246,9 +248,10 @@ class FooterModal(discord.ui.Modal, title="Update Footer"):
         label="Footer", max_length=2048, required=False, placeholder="Leave blank to clear",
     )
 
-    def __init__(self, msg_id: str):
+    def __init__(self, msg_id: str, default: str = ""):
         super().__init__()
         self.msg_id = msg_id
+        self.value_input.default = default
 
     async def on_submit(self, interaction: discord.Interaction):
         msg = await aget_message(self.msg_id)
@@ -264,9 +267,10 @@ class ImageModal(discord.ui.Modal, title="Update Image URL"):
         label="Image URL", required=False, placeholder="Leave blank to clear",
     )
 
-    def __init__(self, msg_id: str):
+    def __init__(self, msg_id: str, default: str = ""):
         super().__init__()
         self.msg_id = msg_id
+        self.value_input.default = default
 
     async def on_submit(self, interaction: discord.Interaction):
         msg = await aget_message(self.msg_id)
@@ -286,9 +290,11 @@ class LinkButtonModal(discord.ui.Modal, title="Update Link Button"):
         label="Button URL", required=False, placeholder="https://...",
     )
 
-    def __init__(self, msg_id: str):
+    def __init__(self, msg_id: str, label_default: str = "", url_default: str = ""):
         super().__init__()
         self.msg_id = msg_id
+        self.label_input.default = label_default
+        self.url_input.default = url_default
 
     async def on_submit(self, interaction: discord.Interaction):
         msg = await aget_message(self.msg_id)
@@ -306,9 +312,10 @@ class ColorModal(discord.ui.Modal, title="Update Color"):
         placeholder="Leave blank to clear",
     )
 
-    def __init__(self, msg_id: str):
+    def __init__(self, msg_id: str, default: str = ""):
         super().__init__()
         self.msg_id = msg_id
+        self.value_input.default = default
 
     async def on_submit(self, interaction: discord.Interaction):
         result = parse_color(self.value_input.value)
@@ -486,15 +493,24 @@ class SaveChangesButton(discord.ui.Button):
 class FieldButton(discord.ui.Button):
     """Dynamic field button: green with 'Update X' label when the field has a value."""
 
-    def __init__(self, msg_id: str, field_label: str, modal_class: type, has_value: bool, row: int):
+    def __init__(self, msg_id: str, field_label: str, modal_class: type, has_value: bool, row: int, default_fn=None):
         label = f"Update {field_label}" if has_value else field_label
         style = discord.ButtonStyle.success if has_value else discord.ButtonStyle.secondary
         super().__init__(label=label, style=style, row=row)
         self.msg_id = msg_id
         self.modal_class = modal_class
+        self.default_fn = default_fn
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(self.modal_class(self.msg_id))
+        if self.default_fn:
+            msg = await aget_message(self.msg_id)
+            default = self.default_fn(msg)
+            if isinstance(default, tuple):
+                await interaction.response.send_modal(self.modal_class(self.msg_id, *default))
+            else:
+                await interaction.response.send_modal(self.modal_class(self.msg_id, default))
+        else:
+            await interaction.response.send_modal(self.modal_class(self.msg_id))
 
 
 # ---------------------------------------------------------------------------
@@ -506,15 +522,15 @@ class EditFieldsView(discord.ui.View):
         super().__init__(timeout=600)
         has_btn = bool(msg.get("button_label") and msg.get("button_url"))
         fields = [
-            ("Title",       TitleModal,       bool(msg.get("title")),        0),
-            ("Description", DescriptionModal, bool(msg.get("description")),  0),
-            ("Footer",      FooterModal,      bool(msg.get("footer")),        0),
-            ("Image URL",   ImageModal,       bool(msg.get("image_url")),     1),
-            ("Link Button", LinkButtonModal,  has_btn,                        1),
-            ("Color",       ColorModal,       msg.get("color") is not None,   1),
+            ("Title",       TitleModal,       bool(msg.get("title")),        0, lambda m: m.get("title") or ""),
+            ("Description", DescriptionModal, bool(msg.get("description")),  0, lambda m: m.get("description") or ""),
+            ("Footer",      FooterModal,      bool(msg.get("footer")),       0, lambda m: m.get("footer") or ""),
+            ("Image URL",   ImageModal,       bool(msg.get("image_url")),    1, lambda m: m.get("image_url") or ""),
+            ("Link Button", LinkButtonModal,  has_btn,                       1, lambda m: (m.get("button_label") or "", m.get("button_url") or "")),
+            ("Color",       ColorModal,       msg.get("color") is not None,  1, lambda m: f"#{m['color']:06X}" if m.get("color") is not None else ""),
         ]
-        for field_label, modal_class, has_value, row in fields:
-            self.add_item(FieldButton(msg_id, field_label, modal_class, has_value, row))
+        for field_label, modal_class, has_value, row, default_fn in fields:
+            self.add_item(FieldButton(msg_id, field_label, modal_class, has_value, row, default_fn))
         self.add_item(BackToBuilderButton(msg_id, row=2))
 
 
