@@ -31,6 +31,7 @@ _FLD_IMAGE = "fld8A6l5dt"
 _FLD_STATUS = "fldph5tFB3"
 
 _STATUS_PENDING = "待发布"
+_STATUS_POSTING = "发布中"
 _STATUS_DONE = "已发布"
 
 REACTION_POOL = [
@@ -279,7 +280,7 @@ class UpdatesCog(commands.Cog):
             fields = rec["fields"]
             content = _extract_text(fields.get(_FLD_CONTENT))
             attachments = fields.get(_FLD_IMAGE) or []
-            image_url = attachments[0]["url"] if attachments else None
+            image_url = attachments[0].get("url") if attachments else None  # fix #5: .get avoids KeyError
 
             # Download image; skip record and retry next poll on failure
             file: Optional[discord.File] = None
@@ -291,7 +292,16 @@ class UpdatesCog(commands.Cog):
                     print(f"[updates] Image download failed for {record_id}, will retry: {exc}", flush=True)
                     continue
 
-            # Send to Discord; skip on failure (status unchanged → retried next poll)
+            # Guard against double-post on crash: mark 发布中 before sending.
+            # If the process dies after this write but before 已发布, the record
+            # stays 发布中 and won't be re-picked by _is_due (which checks 待发布 only).
+            try:
+                await _update_record_status_with_retry(record_id, _STATUS_POSTING)
+            except Exception as exc:
+                print(f"[updates] Could not mark {record_id} as 发布中, skipping: {exc}", flush=True)
+                continue
+
+            # Send to Discord; restore 待发布 on failure so next poll retries
             try:
                 if file:
                     msg = await channel.send(content=content, file=file)
@@ -299,6 +309,10 @@ class UpdatesCog(commands.Cog):
                     msg = await channel.send(content=content)
             except Exception as exc:
                 print(f"[updates] Discord send failed for {record_id}: {exc}", flush=True)
+                try:
+                    await _update_record_status_with_retry(record_id, _STATUS_PENDING)
+                except Exception:
+                    pass
                 continue
 
             print(f"[updates] Posted {record_id}, Discord message ID {msg.id}", flush=True)
