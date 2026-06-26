@@ -40,6 +40,7 @@ async def main():
             await bot.load_extension("cogs.bigwin")
             await bot.load_extension("cogs.jackpot")
             await bot.load_extension("cogs.updates")
+            await bot.load_extension("cogs.autorole")
 
             @bot.tree.error
             async def on_app_command_error(interaction: discord.Interaction, error: Exception):
