@@ -55,9 +55,12 @@ async def main():
                 except Exception:
                     pass
 
+            GUILD = discord.Object(id=1498581314495053834)
+
             @bot.event
             async def on_ready():
-                await bot.tree.sync()
+                bot.tree.copy_global_to(guild=GUILD)
+                await bot.tree.sync(guild=GUILD)
                 print(f"Logged in as {bot.user}")
 
             await bot.start(TOKEN)
