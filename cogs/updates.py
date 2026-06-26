@@ -9,7 +9,7 @@ import aiohttp
 import discord
 from discord.ext import commands, tasks
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# ── Constants ─────────────────────────────────────────────────────────────────
 
 _BJT = datetime.timezone(datetime.timedelta(hours=8))
 _UTC = datetime.timezone.utc
@@ -21,10 +21,20 @@ STAFF_CHAT_CHANNEL_ID: int = int(os.getenv("STAFF_CHAT_CHANNEL_ID", "0"))
 LARK_BASE = "https://open.larksuite.com/open-apis"
 LARK_APP_ID: str = os.getenv("LARK_APP_ID", "")
 LARK_APP_SECRET: str = os.getenv("LARK_APP_SECRET", "")
-LARK_SPREADSHEET_TOKEN: str = os.getenv("LARK_SPREADSHEET_TOKEN", "")
-LARK_SHEET_ID: str = os.getenv("LARK_SHEET_ID", "")
 LARK_NOTIFY_CHAT_ID: str = os.getenv("LARK_NOTIFY_CHAT_ID", "")
 
+BITABLE_APP_TOKEN: str = os.getenv("BITABLE_APP_TOKEN", "IPG2bxK0IanGwksBqVljigsMpcb")
+BITABLE_TABLE_ID: str = os.getenv("BITABLE_TABLE_ID", "tble5kqGbD4P0aHy")
+
+# Bitable field IDs
+_FLD_DATE = "flduHQ5WXI"
+_FLD_CONTENT = "fldXByOoKH"
+_FLD_IMAGE = "fld8A6l5dt"
+_FLD_STATUS = "fldph5tFB3"
+
+_STATUS_PENDING = "待发布"
+_STATUS_POSTING = "发布中"
+_STATUS_DONE = "已发布"
 
 REACTION_POOL = [
     "🎉", "🎊", "🔥", "💜", "✨", "🚀", "💰", "🎰",
@@ -34,74 +44,44 @@ REACTION_POOL = [
 
 # ── Pure helpers (tested) ─────────────────────────────────────────────────────
 
-def parse_rich_text(cell_value) -> str:
-    """Convert Lark cell value (plain string or rich-text array) to plain text.
-
-    URL nodes get https:// prepended if missing.
-    """
-    if cell_value is None:
+def _extract_text(value) -> str:
+    """Extract plain text from a Bitable text field (string or rich-text list)."""
+    if value is None:
         return ""
-    if isinstance(cell_value, str):
-        return cell_value
-    if isinstance(cell_value, list):
-        parts = []
-        for node in cell_value:
-            if not isinstance(node, dict):
-                continue
-            if node.get("type") == "url":
-                link = node.get("link", "")
-                if link and not link.startswith(("https://", "http://")):
-                    link = "https://" + link
-                parts.append(link or "")
-            else:
-                parts.append(node.get("text", ""))
-        return "".join(parts)
-    return str(cell_value)
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(seg.get("text", "") for seg in value if isinstance(seg, dict))
+    return str(value)
 
 
-def get_image_token(cell_value) -> Optional[str]:
-    """Return Lark fileToken if cell contains an embed-image, else None."""
-    if not cell_value:
-        return None
-    if isinstance(cell_value, str) and cell_value.strip() in ("无", ""):
-        return None
-    if isinstance(cell_value, dict) and cell_value.get("type") == "embed-image":
-        return cell_value.get("fileToken")
-    return None
-
-
-def find_pending_row(
-    rows: list,
+def find_pending_record(
+    records: list,
     today: Optional[datetime.date] = None,
 ) -> Optional[tuple]:
-    """Scan rows for the first exclusive-updates row that is 待发布 and due.
+    """Return (record_id, fields) for the first record that is 待发布 and due today or earlier.
 
     Args:
-        rows: raw values list from Lark Sheets API (0-indexed, row 0 = title).
+        records: list of record dicts from Bitable API (field_id_as_field_name=true).
         today: date to compare against; defaults to current BJT date.
-
-    Returns:
-        (sheet_row_1based: int, row: list) or None.
     """
     if today is None:
         today = datetime.datetime.now(_BJT).date()
-    for i, row in enumerate(rows):
-        if len(row) < 6:
+    for rec in records:
+        fields = rec.get("fields", {})
+        if fields.get(_FLD_STATUS) != _STATUS_PENDING:
             continue
-        date_val, channel, _, _, _, status = row[0], row[1], row[2], row[3], row[4], row[5]
-        if not date_val or not channel or not status:
-            continue
-        if str(channel).strip() != "exclusive-updates":
-            continue
-        if str(status).strip() != "待发布":
+        date_ts = fields.get(_FLD_DATE)
+        if not date_ts:
             continue
         try:
-            row_date = datetime.datetime.strptime(str(date_val).strip(), "%Y-%m-%d %H:%M").date()
-        except ValueError:
+            record_date = datetime.datetime.fromtimestamp(int(date_ts) / 1000, tz=_BJT).date()
+        except (ValueError, TypeError):
             continue
-        if row_date <= today:
-            return (i + 1, row)  # i+1 converts to 1-based sheet row
+        if record_date <= today:
+            return (rec["record_id"], fields)
     return None
+
 
 # ── Lark API client ───────────────────────────────────────────────────────────
 
@@ -130,23 +110,25 @@ async def _get_lark_token() -> str:
             return data["app_access_token"]
 
 
-async def _read_sheet() -> list:
+async def _read_bitable_records() -> list:
     token = await _get_lark_token()
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f"{LARK_BASE}/sheets/v2/spreadsheets/{LARK_SPREADSHEET_TOKEN}"
-            f"/values/{LARK_SHEET_ID}!A1:G100",
+            f"{LARK_BASE}/bitable/v1/apps/{BITABLE_APP_TOKEN}/tables/{BITABLE_TABLE_ID}/records",
+            params={"field_id_as_field_name": "true", "page_size": "100"},
             headers={"Authorization": f"Bearer {token}"},
         ) as resp:
             data = await resp.json()
-            return data["data"]["valueRange"]["values"]
+            if data.get("code") != 0:
+                raise RuntimeError(f"Bitable read error: {data.get('msg')}")
+            return data["data"]["items"]
 
 
-async def _download_image(file_token: str) -> bytes:
+async def _download_bitable_image(url: str) -> bytes:
     token = await _get_lark_token()
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f"{LARK_BASE}/drive/v1/medias/{file_token}/download",
+            url,
             headers={"Authorization": f"Bearer {token}"},
         ) as resp:
             if resp.status != 200:
@@ -154,40 +136,38 @@ async def _download_image(file_token: str) -> bytes:
             return await resp.read()
 
 
-async def _write_cell(sheet_row: int, col: str, value: str) -> None:
-    """Write a single cell. sheet_row is 1-based."""
+async def _update_record_status(record_id: str, status: str) -> None:
     token = await _get_lark_token()
-    range_str = f"{LARK_SHEET_ID}!{col}{sheet_row}:{col}{sheet_row}"
     async with aiohttp.ClientSession() as session:
         async with session.put(
-            f"{LARK_BASE}/sheets/v2/spreadsheets/{LARK_SPREADSHEET_TOKEN}/values",
+            f"{LARK_BASE}/bitable/v1/apps/{BITABLE_APP_TOKEN}/tables/{BITABLE_TABLE_ID}/records/{record_id}",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"valueRange": {"range": range_str, "values": [[value]]}},
+            json={"fields": {_FLD_STATUS: status}},
         ) as resp:
             data = await resp.json()
             if data.get("code") != 0:
-                raise RuntimeError(f"Lark write error: {data.get('msg')}")
+                raise RuntimeError(f"Bitable update error: {data.get('msg')}")
 
 
-async def _write_cell_with_retry(
-    sheet_row: int, col: str, value: str, retries: int = 3
+async def _update_record_status_with_retry(
+    record_id: str, status: str, retries: int = 3
 ) -> None:
     last_exc: Exception = RuntimeError("no attempts made")
     for attempt in range(1, retries + 1):
         try:
-            await _write_cell(sheet_row, col, value)
+            await _update_record_status(record_id, status)
             return
         except Exception as exc:
             last_exc = exc
             print(
-                f"[updates] Lark write {col}{sheet_row}={value!r} "
+                f"[updates] Bitable update {record_id} status={status!r} "
                 f"attempt {attempt}/{retries} failed: {exc}",
                 flush=True,
             )
             if attempt < retries:
                 await asyncio.sleep(5)
     raise RuntimeError(
-        f"Lark write {col}{sheet_row}={value!r} failed after {retries} retries"
+        f"Bitable update {record_id} status={status!r} failed after {retries} retries"
     ) from last_exc
 
 
@@ -296,31 +276,31 @@ class UpdatesCog(commands.Cog):
 
     async def _do_post(self) -> None:
         try:
-            rows = await _read_sheet()
+            records = await _read_bitable_records()
         except Exception as exc:
-            print(f"[updates] Failed to read Lark sheet: {exc}", flush=True)
+            print(f"[updates] Failed to read Bitable: {exc}", flush=True)
             return
 
-        result = find_pending_row(rows)
+        result = find_pending_record(records)
         if result is None:
-            print("[updates] No pending row found", flush=True)
+            print("[updates] No pending record found", flush=True)
             return
 
-        sheet_row, row = result
-        content = parse_rich_text(row[3] if len(row) > 3 else None)
-        image_token = get_image_token(row[4] if len(row) > 4 else None)
+        record_id, fields = result
+        content = _extract_text(fields.get(_FLD_CONTENT))
+        attachments = fields.get(_FLD_IMAGE) or []
+        image_url = attachments[0]["url"] if attachments else None
 
         try:
-            await _write_cell_with_retry(sheet_row, "F", "发布中")
+            await _update_record_status_with_retry(record_id, _STATUS_POSTING)
         except Exception as exc:
-            # Best-effort guard against double-post on restart; don't abort posting.
-            print(f"[updates] Warning: could not mark row {sheet_row} as 发布中: {exc}", flush=True)
+            print(f"[updates] Warning: could not mark {record_id} as 发布中: {exc}", flush=True)
 
         file: Optional[discord.File] = None
-        if image_token:
+        if image_url:
             for attempt in range(1, 4):
                 try:
-                    image_bytes = await _download_image(image_token)
+                    image_bytes = await _download_bitable_image(image_url)
                     file = discord.File(io.BytesIO(image_bytes), filename="update.jpg")
                     break
                 except Exception as exc:
@@ -332,20 +312,20 @@ class UpdatesCog(commands.Cog):
                         await asyncio.sleep(15)
 
             if file is None:
-                await _write_cell_with_retry(sheet_row, "F", "待发布")
+                await _update_record_status_with_retry(record_id, _STATUS_PENDING)
                 staff = self.bot.get_channel(STAFF_CHAT_CHANNEL_ID)
                 if isinstance(staff, discord.abc.Messageable):
                     await staff.send(
                         f"⚠️ Updates 自动发布失败：图片下载重试 3 次均失败，请手动处理。\n"
-                        f"表格第 {sheet_row} 行已恢复为「待发布」。"
+                        f"Record ID {record_id} 已恢复为「待发布」。"
                     )
-                print(f"[updates] Aborted row {sheet_row}: image unavailable", flush=True)
+                print(f"[updates] Aborted {record_id}: image unavailable", flush=True)
                 return
 
         channel = self.bot.get_channel(UPDATE_CHANNEL_ID)
         if not isinstance(channel, discord.abc.Messageable):
             print(f"[updates] UPDATE_CHANNEL_ID {UPDATE_CHANNEL_ID} not found", flush=True)
-            await _write_cell_with_retry(sheet_row, "F", "待发布")
+            await _update_record_status_with_retry(record_id, _STATUS_PENDING)
             return
 
         try:
@@ -355,14 +335,14 @@ class UpdatesCog(commands.Cog):
                 msg = await channel.send(content=content)
         except Exception as exc:
             print(f"[updates] Discord send failed: {exc}", flush=True)
-            await _write_cell_with_retry(sheet_row, "F", "待发布")
+            await _update_record_status_with_retry(record_id, _STATUS_PENDING)
             return
 
-        print(f"[updates] Posted row {sheet_row}, Discord message ID {msg.id}", flush=True)
+        print(f"[updates] Posted {record_id}, Discord message ID {msg.id}", flush=True)
         try:
-            await _write_cell_with_retry(sheet_row, "F", "已发布")
+            await _update_record_status_with_retry(record_id, _STATUS_DONE)
         except Exception as exc:
-            msg_text = f"⚠️ Updates 表格状态更新失败，请手动将第 {sheet_row} 行改为「已发布」"
+            msg_text = f"⚠️ Updates 表格状态更新失败，请手动将 record {record_id} 改为「已发布」"
             print(f"[updates] {msg_text}: {exc}", flush=True)
             await _send_lark_dm(msg_text)
 
