@@ -24,11 +24,11 @@ LARK_NOTIFY_CHAT_ID: str = os.getenv("LARK_NOTIFY_CHAT_ID", "")
 
 BITABLE_APP_TOKEN: str = os.getenv("BITABLE_APP_TOKEN", "IPG2bxK0IanGwksBqVljigsMpcb")
 BITABLE_TABLE_ID: str = os.getenv("BITABLE_TABLE_ID", "tble5kqGbD4P0aHy")
-# Bitable field IDs
-_FLD_DATE = "flduHQ5WXI"
-_FLD_CONTENT = "fldXByOoKH"
-_FLD_IMAGE = "fld8A6l5dt"
-_FLD_STATUS = "fldph5tFB3"
+# Bitable field names (larksuite international API returns field names, not IDs)
+_FLD_DATE = "日期"
+_FLD_CONTENT = "发布文案"
+_FLD_IMAGE = "配图"
+_FLD_STATUS = "状态"
 
 _STATUS_PENDING = "待发布"
 _STATUS_POSTING = "发布中"
@@ -102,7 +102,7 @@ async def _read_bitable_records() -> list:
     async with aiohttp.ClientSession() as session:
         async with session.get(
             f"{LARK_BASE}/bitable/v1/apps/{BITABLE_APP_TOKEN}/tables/{BITABLE_TABLE_ID}/records",
-            params={"field_id_as_field_name": "true", "page_size": "100"},
+            params={"page_size": "100"},
             headers={"Authorization": f"Bearer {token}"},
         ) as resp:
             data = await resp.json()
