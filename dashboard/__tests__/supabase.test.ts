@@ -17,11 +17,13 @@ describe("supabase client", () => {
 
   it("throws if SUPABASE_URL is missing", async () => {
     delete process.env.SUPABASE_URL
-    await expect(import("@/lib/supabase")).rejects.toThrow("Missing env: SUPABASE_URL")
+    const { supabase } = await import("@/lib/supabase")
+    expect(() => supabase.from("messages")).toThrow("Missing env: SUPABASE_URL")
   })
 
   it("throws if SUPABASE_SERVICE_KEY is missing", async () => {
     delete process.env.SUPABASE_SERVICE_KEY
-    await expect(import("@/lib/supabase")).rejects.toThrow("Missing env: SUPABASE_SERVICE_KEY")
+    const { supabase } = await import("@/lib/supabase")
+    expect(() => supabase.from("messages")).toThrow("Missing env: SUPABASE_SERVICE_KEY")
   })
 })

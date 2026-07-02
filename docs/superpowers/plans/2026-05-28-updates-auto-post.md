@@ -586,7 +586,7 @@ In Railway → Fortune Purple Bot → Variables, add:
 | `UPDATE_CHANNEL_ID` | `1501874966940094687` |
 | `STAFF_CHAT_CHANNEL_ID` | `1498591761940090991` |
 | `LARK_APP_ID` | `cli_a97b5b7020381e17` |
-| `LARK_APP_SECRET` | `OH8Q0QtN3ritiahfhQtsnc0Ygv00PQyp` |
+| `LARK_APP_SECRET` | 从 Railway / 密钥管理处读取，不写入文档 |
 | `LARK_SPREADSHEET_TOKEN` | `VdvlsAsnChhGMwtrwIfj7Ynypyb` |
 | `LARK_SHEET_ID` | `cBez8N` |
 

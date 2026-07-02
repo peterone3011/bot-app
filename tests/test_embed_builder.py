@@ -1,4 +1,5 @@
-from unittest.mock import patch
+import asyncio
+from unittest.mock import AsyncMock, patch
 import pytest
 import cogs.embed as eb
 
@@ -136,22 +137,25 @@ def test_build_view_partial_button():
 # ---------------------------------------------------------------------------
 
 def test_last_used_color_no_messages():
-    with patch("cogs.embed.load_messages", return_value=[]):
-        assert eb.last_used_color() is None
+    with patch("cogs.embed.aload_messages", new_callable=AsyncMock) as mock_load:
+        mock_load.return_value = []
+        assert asyncio.run(eb.last_used_color()) is None
 
 
 def test_last_used_color_returns_most_recent():
     old = {**eb.new_draft(1, color=0xFF0000), "created_at": "2026-01-01T00:00:00+08:00"}
     new = {**eb.new_draft(2, color=0x00FF00), "created_at": "2026-06-01T00:00:00+08:00"}
-    with patch("cogs.embed.load_messages", return_value=[old, new]):
-        assert eb.last_used_color() == 0x00FF00
+    with patch("cogs.embed.aload_messages", new_callable=AsyncMock) as mock_load:
+        mock_load.return_value = [old, new]
+        assert asyncio.run(eb.last_used_color()) == 0x00FF00
 
 
 def test_last_used_color_skips_uncolored():
     no_color = eb.new_draft(1)
     colored = eb.new_draft(2, color=0xABCDEF)
-    with patch("cogs.embed.load_messages", return_value=[no_color, colored]):
-        assert eb.last_used_color() == 0xABCDEF
+    with patch("cogs.embed.aload_messages", new_callable=AsyncMock) as mock_load:
+        mock_load.return_value = [no_color, colored]
+        assert asyncio.run(eb.last_used_color()) == 0xABCDEF
 
 
 # ---------------------------------------------------------------------------

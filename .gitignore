@@ -1,0 +1,24 @@
+.env
+.env.*
+*.log
+__pycache__/
+*.py[cod]
+.pytest_cache/
+node_modules/
+bot_stdout.log
+bot.log
+
+# Local workspace / Discord server snapshots
+.claude/
+channels.txt
+perms.txt
+role_msg_id.txt
+server_info.txt
+setup.log
+
+# Local smoke-test scratch files
+test.bat
+test.txt
+test_ok.txt
+test_image_send.py
+启动Bot.bat

@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Fortune Purple Dashboard
 
-## Getting Started
+Internal Next.js dashboard for managing the Fortune Purple Discord Bot. It is deployed to Vercel and shares Supabase/Redis infrastructure with the Railway Bot.
 
-First, run the development server:
+## Stack
+
+- Next.js 14 App Router
+- TypeScript
+- Tailwind CSS + shadcn-style UI components
+- NextAuth v5 with Discord OAuth
+- Supabase service-role client for server-side database access
+- Upstash Redis / Ratelimit
+- Vitest + Testing Library
+
+## Pages
+
+| Route | Purpose |
+|---|---|
+| `/login` | Discord OAuth login |
+| `/dashboard/embeds` | Embed message list |
+| `/dashboard/embeds/new` | Create a new embed draft |
+| `/dashboard/embeds/[id]` | Edit and publish an embed |
+| `/dashboard/roles` | Manage notification roles shown by the Bot selector |
+| `/dashboard/bigwin` | View Big Win broadcast history |
+
+## API Routes
+
+| Route | Purpose |
+|---|---|
+| `/api/auth/[...nextauth]` | NextAuth handler |
+| `/api/embeds` and `/api/embeds/[id]` | Embed CRUD |
+| `/api/embeds/[id]/publish` | Publish or update a Discord embed |
+| `/api/roles` and `/api/roles/[id]` | Role CRUD and ordering |
+| `/api/discord/channels` | Discord channel lookup for forms |
+| `/api/broadcast/bigwin` | Big Win broadcast endpoint |
+| `/api/broadcast/bigwin/history` | Big Win history endpoint |
+
+Dashboard and admin APIs require an authenticated Discord admin session, except the Big Win broadcast endpoint, which uses bearer-token auth for cron/API callers.
+
+## Environment Variables
+
+Real values belong in Vercel environment variables or local `.env.local`, not in git.
+
+| Variable | Purpose |
+|---|---|
+| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Discord OAuth app |
+| `DISCORD_GUILD_ID` / `DISCORD_ADMIN_ROLE_ID` | Admin access check |
+| `DISCORD_BOT_TOKEN` | Send Discord messages through API routes |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` | Server-side DB access |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Redis and rate limiting |
+| `NEXTAUTH_SECRET` / `AUTH_SECRET` | NextAuth session signing |
+| `BROADCAST_API_KEY` | External Big Win POST auth |
+| `CRON_SECRET` | Bot cron GET auth |
+| `BIGWIN_CHANNEL_ID` / `BIGWIN_BUTTON_URL` | Big Win Discord target and button |
+
+## Local Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The dev server uses port `3099`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+http://localhost:3099
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Verification
 
-## Learn More
+```bash
+npm test
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+On Windows PowerShell, if script execution blocks `npm`, run tests through `cmd`:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bat
+cmd /c npm test
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment
 
-## Deploy on Vercel
+Production runs on Vercel:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```text
+https://fortunepurplebot.vercel.app
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+GitHub integration may not always auto-trigger. For production changes, verify the Vercel deployment manually after pushing.

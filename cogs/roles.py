@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 
+from cogs.community_metrics import record_metric_event
 from cogs.db import aload_roles
 
 EMBED_TITLE = "Select Your Notifications"
@@ -43,6 +44,7 @@ async def handle_role(interaction: discord.Interaction, selected: str) -> None:
         )
     else:
         await member.add_roles(role)
+        await record_metric_event("role_subscribe", member_id=member.id, role=role.name)
         await interaction.followup.send(
             content=f"✅ Subscribed to **{selected}**!", ephemeral=True
         )

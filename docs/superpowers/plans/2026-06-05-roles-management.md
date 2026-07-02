@@ -47,7 +47,7 @@ Create `dashboard/migrate-phase1.mjs`:
 
 ```javascript
 const API = "https://api.supabase.com/v1/projects/aojqdfhevisgcvfuurvl/database/query"
-const TOKEN = "sbp_b6ad1ae335f9567a013df14aa5f0b4ed94cbfdc3"
+const TOKEN = process.env.SUPABASE_MANAGEMENT_TOKEN
 
 async function run(sql) {
   const res = await fetch(API, {
@@ -114,7 +114,7 @@ Expected: six `OK:` lines, then `Migration complete.` — no `FAILED:` output.
 node -e "
 const r = await fetch('https://api.supabase.com/v1/projects/aojqdfhevisgcvfuurvl/database/query', {
   method:'POST',
-  headers:{'Authorization':'Bearer sbp_b6ad1ae335f9567a013df14aa5f0b4ed94cbfdc3','Content-Type':'application/json'},
+  headers:{'Authorization':'Bearer ' + process.env.SUPABASE_MANAGEMENT_TOKEN,'Content-Type':'application/json'},
   body: JSON.stringify({query:'SELECT label, display_order FROM roles ORDER BY display_order'})
 })
 console.log(JSON.stringify(await r.json(), null, 2))
@@ -1396,7 +1396,7 @@ Only run this after Task 12 is confirmed working.
 node -e "
 const r = await fetch('https://api.supabase.com/v1/projects/aojqdfhevisgcvfuurvl/database/query', {
   method:'POST',
-  headers:{'Authorization':'Bearer sbp_b6ad1ae335f9567a013df14aa5f0b4ed94cbfdc3','Content-Type':'application/json'},
+  headers:{'Authorization':'Bearer ' + process.env.SUPABASE_MANAGEMENT_TOKEN,'Content-Type':'application/json'},
   body: JSON.stringify({query:'DROP TABLE sites'})
 })
 console.log(JSON.stringify(await r.json()))
@@ -1411,7 +1411,7 @@ Expected: success response, no `error` key.
 node -e "
 const r = await fetch('https://api.supabase.com/v1/projects/aojqdfhevisgcvfuurvl/database/query', {
   method:'POST',
-  headers:{'Authorization':'Bearer sbp_b6ad1ae335f9567a013df14aa5f0b4ed94cbfdc3','Content-Type':'application/json'},
+  headers:{'Authorization':'Bearer ' + process.env.SUPABASE_MANAGEMENT_TOKEN,'Content-Type':'application/json'},
   body: JSON.stringify({query:\"SELECT to_regclass('public.sites')\"})
 })
 console.log(JSON.stringify(await r.json()))
