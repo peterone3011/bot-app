@@ -103,8 +103,16 @@ def _normalize_sheet_date(value: Any) -> str:
     if isinstance(value, (int, float)):
         # Lark/Excel-style serial date, matching the existing sheet rows.
         base = datetime.date(1899, 12, 30)
-        return (base + datetime.timedelta(days=int(value))).isoformat()
-    return str(value or "").strip()
+        return _format_sheet_date(base + datetime.timedelta(days=int(value)))
+    text = str(value or "").strip()
+    try:
+        return _format_sheet_date(datetime.date.fromisoformat(text))
+    except ValueError:
+        return text
+
+
+def _format_sheet_date(day: datetime.date) -> str:
+    return day.strftime("%Y/%m/%d")
 
 
 async def record_metric_event(
@@ -244,9 +252,10 @@ class CommunityMetricsCog(commands.Cog):
         gaming_subs = _count_unique_role_subscribers(events, start, end, GAMING_ROLE_NAME)
         updates_subs = _count_unique_role_subscribers(events, start, end, UPDATES_ROLE_NAME)
         total_members = guild.member_count or len([m for m in guild.members if not m.bot])
+        sheet_date = _format_sheet_date(day)
 
         row = [
-            day.isoformat(),
+            sheet_date,
             total_members,
             joins,
             leaves,
@@ -255,9 +264,9 @@ class CommunityMetricsCog(commands.Cog):
             updates_subs,
         ]
         try:
-            target = await self._find_or_next_row("A", day.isoformat(), "A:G")
+            target = await self._find_or_next_row("A", sheet_date, "A:G")
             await self.sheet.write_values(f"{METRICS_SHEET_ID}!A{target}:G{target}", [row])
-            print(f"[community_metrics] Daily row updated for {day.isoformat()} at row {target}", flush=True)
+            print(f"[community_metrics] Daily row updated for {sheet_date} at row {target}", flush=True)
         except Exception as exc:
             print(f"[community_metrics] Daily rollup failed: {exc}", flush=True)
 
@@ -275,9 +284,10 @@ class CommunityMetricsCog(commands.Cog):
         gaming_role = _find_role(guild, GAMING_ROLE_NAME)
         updates_role = _find_role(guild, UPDATES_ROLE_NAME)
         reaction_count = await self._count_weekly_update_reactions(start, end)
+        sheet_date = _format_sheet_date(day)
 
         row = [
-            day.isoformat(),
+            sheet_date,
             total_members,
             joins,
             leaves,
@@ -287,9 +297,9 @@ class CommunityMetricsCog(commands.Cog):
             len(updates_role.members) if updates_role else 0,
         ]
         try:
-            target = await self._find_or_next_row("J", day.isoformat(), "J:Q")
+            target = await self._find_or_next_row("J", sheet_date, "J:Q")
             await self.sheet.write_values(f"{METRICS_SHEET_ID}!J{target}:Q{target}", [row])
-            print(f"[community_metrics] Weekly row updated for {day.isoformat()} at row {target}", flush=True)
+            print(f"[community_metrics] Weekly row updated for {sheet_date} at row {target}", flush=True)
         except Exception as exc:
             print(f"[community_metrics] Weekly rollup failed: {exc}", flush=True)
 

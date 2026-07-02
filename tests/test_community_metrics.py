@@ -60,5 +60,10 @@ def test_count_unique_role_subscribers_deduplicates_same_member():
 
 
 def test_normalize_lark_serial_date():
-    assert cm._normalize_sheet_date(46206) == "2026-07-03"
-    assert cm._normalize_sheet_date("2026-07-03") == "2026-07-03"
+    assert cm._normalize_sheet_date(46206) == "2026/07/03"
+    assert cm._normalize_sheet_date("2026-07-03") == "2026/07/03"
+    assert cm._normalize_sheet_date("2026/07/03") == "2026/07/03"
+
+
+def test_format_sheet_date_uses_slashes():
+    assert cm._format_sheet_date(datetime.date(2026, 7, 3)) == "2026/07/03"
