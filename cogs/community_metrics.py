@@ -29,6 +29,7 @@ METRICS_SHEET_ID = os.getenv("COMMUNITY_METRICS_SHEET_ID", "e348a1")
 UPDATE_CHANNEL_ID = int(os.getenv("UPDATE_CHANNEL_ID", "0") or "0")
 GAMING_ROLE_NAME = os.getenv("METRICS_GAMING_ROLE_NAME", "Gaming Alerts")
 UPDATES_ROLE_NAME = os.getenv("METRICS_UPDATES_ROLE_NAME", "Exclusive Updates")
+BOT_REACTIONS_PER_UPDATE = int(os.getenv("METRICS_BOT_REACTIONS_PER_UPDATE", "10") or "10")
 
 EventType = Literal["join", "leave", "role_subscribe"]
 
@@ -113,6 +114,10 @@ def _normalize_sheet_date(value: Any) -> str:
 
 def _format_sheet_date(day: datetime.date) -> str:
     return day.strftime("%Y/%m/%d")
+
+
+def _count_human_reactions(reaction_counts: Iterable[int]) -> int:
+    return max(0, sum(reaction_counts) - BOT_REACTIONS_PER_UPDATE)
 
 
 async def record_metric_event(
@@ -331,7 +336,7 @@ class CommunityMetricsCog(commands.Cog):
             async for message in channel.history(limit=None, after=after, before=before):
                 if message.author != self.bot.user:
                     continue
-                total += sum(reaction.count for reaction in message.reactions)
+                total += _count_human_reactions(reaction.count for reaction in message.reactions)
         except Exception as exc:
             print(f"[community_metrics] Failed to count update reactions: {exc}", flush=True)
         return total

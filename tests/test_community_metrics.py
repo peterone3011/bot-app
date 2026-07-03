@@ -67,3 +67,11 @@ def test_normalize_lark_serial_date():
 
 def test_format_sheet_date_uses_slashes():
     assert cm._format_sheet_date(datetime.date(2026, 7, 3)) == "2026/07/03"
+
+
+def test_count_human_reactions_subtracts_bot_defaults():
+    assert cm._count_human_reactions([5, 7, 3]) == 5
+
+
+def test_count_human_reactions_never_negative():
+    assert cm._count_human_reactions([2, 3]) == 0
