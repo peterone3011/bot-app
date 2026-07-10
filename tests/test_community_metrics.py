@@ -69,6 +69,12 @@ def test_format_sheet_date_uses_slashes():
     assert cm._format_sheet_date(datetime.date(2026, 7, 3)) == "2026/07/03"
 
 
+def test_weekly_sheet_range_matches_current_layout():
+    assert cm.WEEKLY_FIRST_COL == "I"
+    assert cm.WEEKLY_LAST_COL == "P"
+    assert cm.WEEKLY_RANGE_COLS == "I:P"
+
+
 def test_count_human_reactions_subtracts_bot_defaults():
     assert cm._count_human_reactions([5, 7, 3]) == 5
 

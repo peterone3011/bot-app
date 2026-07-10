@@ -30,6 +30,9 @@ UPDATE_CHANNEL_ID = int(os.getenv("UPDATE_CHANNEL_ID", "0") or "0")
 GAMING_ROLE_NAME = os.getenv("METRICS_GAMING_ROLE_NAME", "Gaming Alerts")
 UPDATES_ROLE_NAME = os.getenv("METRICS_UPDATES_ROLE_NAME", "Exclusive Updates")
 BOT_REACTIONS_PER_UPDATE = int(os.getenv("METRICS_BOT_REACTIONS_PER_UPDATE", "10") or "10")
+WEEKLY_FIRST_COL = "I"
+WEEKLY_LAST_COL = "P"
+WEEKLY_RANGE_COLS = "I:P"
 
 EventType = Literal["join", "leave", "role_subscribe"]
 
@@ -302,8 +305,11 @@ class CommunityMetricsCog(commands.Cog):
             len(updates_role.members) if updates_role else 0,
         ]
         try:
-            target = await self._find_or_next_row("J", sheet_date, "J:Q")
-            await self.sheet.write_values(f"{METRICS_SHEET_ID}!J{target}:Q{target}", [row])
+            target = await self._find_or_next_row(WEEKLY_FIRST_COL, sheet_date, WEEKLY_RANGE_COLS)
+            await self.sheet.write_values(
+                f"{METRICS_SHEET_ID}!{WEEKLY_FIRST_COL}{target}:{WEEKLY_LAST_COL}{target}",
+                [row],
+            )
             print(f"[community_metrics] Weekly row updated for {sheet_date} at row {target}", flush=True)
         except Exception as exc:
             print(f"[community_metrics] Weekly rollup failed: {exc}", flush=True)
