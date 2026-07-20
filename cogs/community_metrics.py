@@ -13,6 +13,7 @@ from discord.ext import commands, tasks
 
 _BJT = datetime.timezone(datetime.timedelta(hours=8))
 _UTC = datetime.timezone.utc
+_ROLLUP_TIME_UTC = datetime.time(hour=15, minute=59, tzinfo=_UTC)
 
 _DATA_DIR = Path(os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "/data"))
 _EVENTS_FILE = _DATA_DIR / "community_metrics_events.jsonl"
@@ -48,7 +49,7 @@ def _day_window(day: datetime.date) -> tuple[datetime.datetime, datetime.datetim
 def _week_window(day: datetime.date) -> tuple[datetime.datetime, datetime.datetime]:
     monday = day - datetime.timedelta(days=day.weekday())
     start = datetime.datetime.combine(monday, datetime.time.min, tzinfo=_BJT)
-    return start, datetime.datetime.combine(day, datetime.time(hour=12), tzinfo=_BJT)
+    return start, start + datetime.timedelta(days=7)
 
 
 def _parse_ts(value: str) -> datetime.datetime | None:
@@ -224,7 +225,7 @@ class CommunityMetricsCog(commands.Cog):
         if not member.bot:
             await record_metric_event("leave", member_id=member.id)
 
-    @tasks.loop(time=[datetime.time(hour=4, minute=0, tzinfo=_UTC)])
+    @tasks.loop(time=[_ROLLUP_TIME_UTC])
     async def daily_rollup(self) -> None:
         await self._write_daily(_now_bjt().date())
 
@@ -232,10 +233,10 @@ class CommunityMetricsCog(commands.Cog):
     async def before_daily_rollup(self) -> None:
         await self.bot.wait_until_ready()
 
-    @tasks.loop(time=[datetime.time(hour=4, minute=0, tzinfo=_UTC)])
+    @tasks.loop(time=[_ROLLUP_TIME_UTC])
     async def weekly_rollup(self) -> None:
         today = _now_bjt().date()
-        if today.weekday() == 4:  # Friday
+        if today.weekday() == 6:  # Sunday
             await self._write_weekly(today)
 
     @weekly_rollup.before_loop

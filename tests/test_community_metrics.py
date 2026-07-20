@@ -11,11 +11,15 @@ def test_day_window_uses_bjt_calendar_day():
     assert end.isoformat() == "2026-07-04T00:00:00+08:00"
 
 
-def test_week_window_starts_monday_and_ends_friday_noon():
-    friday = datetime.date(2026, 7, 3)
-    start, end = cm._week_window(friday)
+def test_week_window_starts_monday_and_covers_full_week():
+    sunday = datetime.date(2026, 7, 5)
+    start, end = cm._week_window(sunday)
     assert start.isoformat() == "2026-06-29T00:00:00+08:00"
-    assert end.isoformat() == "2026-07-03T12:00:00+08:00"
+    assert end.isoformat() == "2026-07-06T00:00:00+08:00"
+
+
+def test_rollup_time_is_2359_bjt():
+    assert cm._ROLLUP_TIME_UTC.isoformat() == "15:59:00+00:00"
 
 
 def test_count_events_filters_type_time_and_role():
