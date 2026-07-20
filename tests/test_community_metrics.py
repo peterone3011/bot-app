@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 
 import cogs.community_metrics as cm
@@ -75,9 +76,23 @@ def test_weekly_sheet_range_matches_current_layout():
     assert cm.WEEKLY_RANGE_COLS == "I:P"
 
 
-def test_count_human_reactions_subtracts_bot_defaults():
-    assert cm._count_human_reactions([5, 7, 3]) == 5
+class _FakeReaction:
+    def __init__(self, users):
+        self._users = users
+
+    async def _iter_users(self):
+        for user in self._users:
+            yield user
+
+    def users(self, limit=None):
+        return self._iter_users()
 
 
-def test_count_human_reactions_never_negative():
-    assert cm._count_human_reactions([2, 3]) == 0
+class _FakeUser:
+    def __init__(self, bot):
+        self.bot = bot
+
+
+def test_count_human_reaction_users_excludes_bots():
+    reaction = _FakeReaction([_FakeUser(bot=True), _FakeUser(bot=False), _FakeUser(bot=False)])
+    assert asyncio.run(cm._count_human_reaction_users(reaction)) == 2
