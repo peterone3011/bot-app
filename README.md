@@ -13,6 +13,7 @@ cogs/
   jackpot.py           Daily Jackpot broadcast, gated by JACKPOT_ENABLED
   updates.py           Lark Bitable -> Discord updates polling
   community_metrics.py Daily/weekly Discord community metrics -> Lark Sheet
+  screenshot_activity.py Screenshot proof reward codes -> Lark Sheet
   autorole.py          Auto-assign member role up to 3000 users
   db.py                Supabase helper used by Bot cogs
 dashboard/             Next.js admin dashboard deployed to Vercel
@@ -38,7 +39,8 @@ tests/                 Python unit tests
 - **Big Win history**: Dashboard page `/dashboard/bigwin` reads the last 30 days of Redis-backed broadcast records.
 - **Jackpot**: `cogs/jackpot.py` posts at 19:00 Beijing time when `JACKPOT_ENABLED=1`.
 - **Updates**: `cogs/updates.py` reads Lark Bitable records with status `待发布` and a date before today, posts to Discord, then marks them `已发布`.
-- **Community metrics**: `cogs/community_metrics.py` records join/leave/role-subscribe events, then writes daily metrics at 12:00 Beijing time and weekly metrics every Friday at 12:00 Beijing time to the Lark sheet `FB 社群总表`.
+- **Community metrics**: `cogs/community_metrics.py` records join/leave/role-subscribe events, then writes daily metrics at 23:59 Beijing time and weekly metrics every Sunday at 23:59 Beijing time to the Lark sheet `FB 社群总表`.
+- **Screenshot activity**: `cogs/screenshot_activity.py` watches one configured Discord channel for image submissions, assigns the next available Lark Sheet code, DMs it to the player, and writes the claim record back to Lark.
 - **Autorole**: `cogs/autorole.py` backfills and assigns the configured member role until the 3000-user cap.
 
 ## Environment Variables
@@ -59,6 +61,9 @@ Common Bot variables:
 | `BITABLE_APP_TOKEN` / `BITABLE_TABLE_ID` | Updates Bitable source |
 | `COMMUNITY_METRICS_SPREADSHEET_TOKEN` / `COMMUNITY_METRICS_SHEET_ID` | Optional override for the community metrics sheet |
 | `METRICS_GAMING_ROLE_NAME` / `METRICS_UPDATES_ROLE_NAME` | Optional role-name matching override for metrics |
+| `SCREENSHOT_ACTIVITY_CHANNEL_ID` | Discord channel where players submit screenshot proofs |
+| `SCREENSHOT_CODES_SPREADSHEET_TOKEN` / `SCREENSHOT_CODES_SHEET_ID` | Lark Sheet that stores screenshot activity reward codes |
+| `SCREENSHOT_CODES_RANGE` | Optional code sheet read range, defaults to `A:I` |
 
 Default community metrics target:
 
@@ -66,6 +71,22 @@ Default community metrics target:
 spreadsheet: PA8usyjmshX40HtXaeTjkr4Apne
 sheet: e348a1
 ```
+
+Screenshot activity code sheet columns:
+
+```text
+A code
+B status
+C discord_user_id
+D discord_name
+E discord_message_id
+F screenshot_url
+G claimed_at_bjt
+H dm_status
+I note
+```
+
+Put reward codes in `A2:A26` in the exact order they should be sent. Leave `B:I` blank. The bot treats blank / `available` / `可用` as available and writes `reserved`, `sent`, or `dm_failed` after each submission.
 
 Dashboard variables are documented in `dashboard/README.md`.
 

@@ -41,6 +41,7 @@ async def main():
             await bot.load_extension("cogs.jackpot")
             await bot.load_extension("cogs.updates")
             await bot.load_extension("cogs.community_metrics")
+            await bot.load_extension("cogs.screenshot_activity")
             await bot.load_extension("cogs.autorole")
 
             @bot.tree.error
