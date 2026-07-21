@@ -61,14 +61,33 @@ class SubscriptionSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
-        await handle_role(interaction, self.values[0])
+        selected = self.values[0]
+        options = [
+            discord.SelectOption(
+                label=option.label,
+                value=option.value,
+                description=option.description,
+                emoji=option.emoji,
+                default=False,
+            )
+            for option in self.options
+        ]
+        await interaction.response.edit_message(view=RoleView(options))
+        await handle_role(interaction, selected)
         try:
-            opts = await _build_options()
-            if opts:
-                await interaction.message.edit(view=RoleView(opts))
-        except Exception as e:
-            print(f"[roles] Failed to refresh view after interaction: {e}", flush=True)
+            fresh = await _build_options()
+            current_signature = [
+                (option.label, option.value, option.description, str(option.emoji))
+                for option in options
+            ]
+            fresh_signature = [
+                (option.label, option.value, option.description, str(option.emoji))
+                for option in fresh
+            ]
+            if fresh and fresh_signature != current_signature:
+                await interaction.edit_original_response(view=RoleView(fresh))
+        except Exception as exc:
+            print(f"[roles] Failed to refresh view after interaction: {exc}", flush=True)
 
 
 class RoleView(discord.ui.View):
