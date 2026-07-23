@@ -111,6 +111,7 @@ def _make_cog(bot=None):
     cog._run_lock = asyncio.Lock()
     cog._completed_day = None
     cog._attempted_slots = set()
+    cog._now_bjt = lambda: _bjt(0, 20)
     return cog
 
 
@@ -125,6 +126,14 @@ def _set_bjt_now(monkeypatch, now):
     monkeypatch.setattr(upd.datetime, "datetime", FixedDateTime)
 
 
+class _Clock:
+    def __init__(self, now):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+
 def test_success_stops_later_slots(monkeypatch):
     cog = _make_cog()
     do_post = AsyncMock(return_value=True)
@@ -135,7 +144,9 @@ def test_success_stops_later_slots(monkeypatch):
         await cog._run_attempt(_bjt(0, 6), datetime.time(0, 6))
 
     asyncio.run(run())
-    do_post.assert_awaited_once_with(today=datetime.date(2026, 7, 24))
+    do_post.assert_awaited_once_with(
+        today=datetime.date(2026, 7, 24), deadline=_bjt(0, 30)
+    )
 
 
 def test_failure_allows_next_slot_but_not_duplicate_slot(monkeypatch):
@@ -179,7 +190,9 @@ def test_same_slot_concurrent_attempts_only_post_once(monkeypatch):
 
     asyncio.run(run())
 
-    do_post_mock.assert_awaited_once_with(today=datetime.date(2026, 7, 24))
+    do_post_mock.assert_awaited_once_with(
+        today=datetime.date(2026, 7, 24), deadline=_bjt(0, 30)
+    )
 
 
 def test_auto_post_ignores_delayed_daytime_callback(monkeypatch):
@@ -224,6 +237,32 @@ def test_final_slot_failure_alerts_without_crashing(monkeypatch):
 
     asyncio.run(cog._run_attempt(_bjt(0, 16), datetime.time(0, 16)))
 
+    send_alert.assert_awaited_once()
+    assert cog._completed_day == datetime.date(2026, 7, 24)
+
+
+def test_final_slot_expired_while_waiting_for_lock_skips_bitable_read(monkeypatch):
+    cog = _make_cog()
+    clock = _Clock(_bjt(0, 16))
+    monkeypatch.setattr(cog, "_now_bjt", clock)
+    read_records = AsyncMock(return_value=[])
+    send_alert = AsyncMock()
+    monkeypatch.setattr(upd, "_read_bitable_records", read_records)
+    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
+
+    async def run():
+        await cog._run_lock.acquire()
+        attempt = asyncio.create_task(
+            cog._run_attempt(_bjt(0, 16), datetime.time(0, 16))
+        )
+        await asyncio.sleep(0)
+        clock.now = _bjt(0, 30, 1)
+        cog._run_lock.release()
+        await attempt
+
+    asyncio.run(run())
+
+    read_records.assert_not_awaited()
     send_alert.assert_awaited_once()
     assert cog._completed_day == datetime.date(2026, 7, 24)
 
@@ -284,6 +323,99 @@ def test_do_post_returns_false_after_malformed_record(monkeypatch):
     monkeypatch.setattr(upd, "_read_bitable_records", AsyncMock(return_value=["not a record"]))
 
     assert asyncio.run(cog._do_post(today=_TODAY)) is False
+
+
+def test_do_post_continues_after_malformed_filter_record(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    channel = _FakeChannel()
+    cog = _make_cog(_FakeBot(channel))
+    valid = _rec(_TS_YESTERDAY)
+    valid["record_id"] = "recValid"
+    update_status = AsyncMock()
+    monkeypatch.setattr(
+        upd, "_read_bitable_records", AsyncMock(return_value=["malformed", valid])
+    )
+    monkeypatch.setattr(upd, "_update_record_status_with_retry", update_status)
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+    assert update_status.await_args_list == [
+        (("recValid", upd._STATUS_POSTING),),
+        (("recValid", upd._STATUS_DONE),),
+    ]
+
+
+def test_do_post_continues_after_pending_record_without_date(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    channel = _FakeChannel()
+    cog = _make_cog(_FakeBot(channel))
+    missing_date = _rec(_TS_YESTERDAY)
+    missing_date["fields"].pop(upd._FLD_DATE)
+    valid = _rec(_TS_YESTERDAY)
+    valid["record_id"] = "recValid"
+    update_status = AsyncMock()
+    monkeypatch.setattr(
+        upd, "_read_bitable_records", AsyncMock(return_value=[missing_date, valid])
+    )
+    monkeypatch.setattr(upd, "_update_record_status_with_retry", update_status)
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+    assert update_status.await_args_list == [
+        (("recValid", upd._STATUS_POSTING),),
+        (("recValid", upd._STATUS_DONE),),
+    ]
+
+
+def test_do_post_restores_pending_without_sending_after_deadline(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    channel = _FakeChannel()
+    channel.send = AsyncMock(return_value=_FakeMessage())
+    cog = _make_cog(_FakeBot(channel))
+    clock = _Clock(_bjt(0, 29, 59))
+    monkeypatch.setattr(cog, "_now_bjt", clock)
+    statuses = []
+
+    async def update_status(record_id, status):
+        statuses.append((record_id, status))
+        if status == upd._STATUS_POSTING:
+            clock.now = _bjt(0, 30, 1)
+
+    monkeypatch.setattr(
+        upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)])
+    )
+    monkeypatch.setattr(
+        upd, "_update_record_status_with_retry", AsyncMock(side_effect=update_status)
+    )
+
+    assert asyncio.run(
+        cog._do_post(today=_TODAY, deadline=_bjt(0, 30))
+    ) is False
+    channel.send.assert_not_awaited()
+    assert statuses == [
+        ("recABC", upd._STATUS_POSTING),
+        ("recABC", upd._STATUS_PENDING),
+    ]
+
+
+def test_do_post_preserves_posting_discord_done_inside_deadline(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    channel = _FakeChannel()
+    channel.send = AsyncMock(return_value=_FakeMessage())
+    cog = _make_cog(_FakeBot(channel))
+    monkeypatch.setattr(cog, "_now_bjt", _Clock(_bjt(0, 29, 59)))
+    update_status = AsyncMock()
+    monkeypatch.setattr(
+        upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)])
+    )
+    monkeypatch.setattr(upd, "_update_record_status_with_retry", update_status)
+
+    assert asyncio.run(
+        cog._do_post(today=_TODAY, deadline=_bjt(0, 30))
+    ) is True
+    channel.send.assert_awaited_once()
+    assert update_status.await_args_list == [
+        (("recABC", upd._STATUS_POSTING),),
+        (("recABC", upd._STATUS_DONE),),
+    ]
 
 
 @pytest.mark.parametrize("exception", [OverflowError, OSError])

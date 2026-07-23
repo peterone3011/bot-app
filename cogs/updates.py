@@ -99,7 +99,7 @@ def _has_invalid_pending_date(rec: dict) -> bool:
         return False
     date_ts = fields.get(_FLD_DATE)
     if not date_ts:
-        return False
+        return True
     try:
         datetime.datetime.fromtimestamp(int(date_ts) / 1000, tz=_BJT)
     except (OverflowError, OSError, ValueError, TypeError):
@@ -242,6 +242,9 @@ class UpdatesCog(commands.Cog):
     def cog_unload(self) -> None:
         self.auto_post.cancel()
 
+    def _now_bjt(self) -> datetime.datetime:
+        return datetime.datetime.now(_BJT)
+
     @tasks.loop(time=_CHECK_TIMES_UTC)
     async def auto_post(self) -> None:
         now = datetime.datetime.now(_BJT)
@@ -260,6 +263,7 @@ class UpdatesCog(commands.Cog):
     ) -> None:
         day = now.date()
         key = (day, slot)
+        deadline = now.replace(hour=0, minute=30, second=0, microsecond=0)
         async with self._run_lock:
             if self._completed_day == day or key in self._attempted_slots:
                 return
@@ -267,18 +271,28 @@ class UpdatesCog(commands.Cog):
                 attempted for attempted in self._attempted_slots if attempted[0] == day
             }
             self._attempted_slots.add(key)
-            success = await self._do_post(today=day)
+            current = self._now_bjt()
+            if current.date() != day or current > deadline:
+                await self._finish_failed_attempt(day, slot)
+                return
+            success = await self._do_post(today=day, deadline=deadline)
             if success:
                 self._completed_day = day
                 return
-            if slot == _CHECK_SLOTS_BJT[-1]:
-                self._completed_day = day
-                note = f"Daily update {day:%Y/%m/%d} failed after all midnight slots."
-                print(f"[updates] {note}", flush=True)
-                try:
-                    await _send_lark_dm(note)
-                except Exception as exc:
-                    print(f"[updates] Failed to send final Lark alert: {exc}", flush=True)
+            await self._finish_failed_attempt(day, slot)
+
+    async def _finish_failed_attempt(
+        self, day: datetime.date, slot: datetime.time
+    ) -> None:
+        if slot != _CHECK_SLOTS_BJT[-1]:
+            return
+        self._completed_day = day
+        note = f"Daily update {day:%Y/%m/%d} failed after all midnight slots."
+        print(f"[updates] {note}", flush=True)
+        try:
+            await _send_lark_dm(note)
+        except Exception as exc:
+            print(f"[updates] Failed to send final Lark alert: {exc}", flush=True)
 
     async def _run_startup_catchup(self) -> None:
         now = datetime.datetime.now(_BJT)
@@ -341,11 +355,19 @@ class UpdatesCog(commands.Cog):
             except Exception:
                 pass
 
-    async def _do_post(self, today: Optional[datetime.date] = None) -> bool:
+    async def _do_post(
+        self,
+        today: Optional[datetime.date] = None,
+        deadline: Optional[datetime.datetime] = None,
+    ) -> bool:
         try:
             records = await _read_bitable_records()
         except Exception as exc:
             print(f"[updates] Failed to read Bitable: {exc}", flush=True)
+            return False
+
+        if deadline is not None and self._now_bjt() > deadline:
+            print("[updates] Midnight posting window expired before filtering", flush=True)
             return False
 
         due = []
@@ -359,7 +381,8 @@ class UpdatesCog(commands.Cog):
                     success = False
             except (AttributeError, TypeError) as exc:
                 print(f"[updates] Invalid record, will retry: {exc}", flush=True)
-                return False
+                success = False
+                continue
         if not due:
             return success
 
@@ -402,6 +425,21 @@ class UpdatesCog(commands.Cog):
                 continue
 
             # Send to Discord; restore 待发布 on failure so next poll retries
+            if deadline is not None and self._now_bjt() > deadline:
+                print(
+                    f"[updates] Midnight posting window expired before sending {record_id}",
+                    flush=True,
+                )
+                success = False
+                try:
+                    await _update_record_status_with_retry(record_id, _STATUS_PENDING)
+                except Exception as exc:
+                    print(
+                        f"[updates] Could not restore {record_id} to pending: {exc}",
+                        flush=True,
+                    )
+                continue
+
             try:
                 if file:
                     msg = await channel.send(content=content, file=file)
