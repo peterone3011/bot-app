@@ -1,10 +1,10 @@
 # Updates Midnight Schedule Implementation Plan
 
-> **Final requirement correction (2026-07-23):** Eligibility is `record_date < today`, not exact-yesterday. Scheduler/read/image/send failures log and skip without new external alerts. A post-success `已发布` writeback failure keeps its existing immediate three-write retry and does not schedule another read that night.
+> **Final requirement correction (2026-07-23):** Eligibility is `record_date < today`. Scheduler/read/image/send failures log and skip without new external alerts. A post-success `已发布` writeback failure keeps its existing three-write retry and does not make that post eligible for resend.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the five-minute Lark Bitable polling loop with one Beijing-midnight check plus two failure-only retries, while ensuring only yesterday's records can publish.
+**Goal:** Replace the five-minute Lark Bitable polling loop with one Beijing-midnight check plus two failure-only retries, while publishing only records dated before today.
 
 **Architecture:** Keep scheduling and publishing inside `cogs/updates.py`, following the existing Discord cog pattern. Add pure time/date helpers, then use process-local completed-day and attempted-slot state behind an `asyncio.Lock`; `_do_post()` returns a boolean so the scheduler can stop after success or advance to the next fixed retry slot.
 
@@ -38,9 +38,9 @@
 - Consumes: existing `_is_due(rec: dict, today: Optional[datetime.date] = None) -> bool`
 - Produces: `_is_due()` that accepts the same arguments but returns true only for `record_date == today - datetime.timedelta(days=1)`
 
-- [ ] **Step 1: Replace the past-date tests with exact-yesterday coverage**
+- [ ] **Step 1: Cover all records dated before today**
 
-Add timestamps for yesterday and older records, then assert that only yesterday is eligible:
+Add timestamps for yesterday and older records, then assert that both are eligible:
 
 ```python
 _TS_YESTERDAY = 1779840000000
@@ -51,13 +51,13 @@ def test_is_due_yesterday():
     assert upd._is_due(_rec(ts=_TS_YESTERDAY), today=_TODAY) is True
 
 
-def test_is_due_older_record_is_not_backfilled():
-    assert upd._is_due(_rec(ts=_TS_OLDER), today=_TODAY) is False
+def test_is_due_older_record():
+    assert upd._is_due(_rec(ts=_TS_OLDER), today=_TODAY) is True
 ```
 
-Keep the existing today, future, status, missing-date, and invalid-date tests. Update the multiple-record test so its one eligible record is dated yesterday.
+Keep the existing today, future, status, missing-date, and invalid-date tests.
 
-- [ ] **Step 2: Run the focused tests and confirm the older-record test fails**
+- [ ] **Step 2: Run the focused tests and confirm the older-record test passes**
 
 Run:
 
@@ -65,18 +65,17 @@ Run:
 python -m pytest tests/test_updates.py -q
 ```
 
-Expected: `test_is_due_older_record_is_not_backfilled` fails because the current implementation accepts every date before today.
+Expected: the yesterday and older-date cases pass while today and future cases remain excluded.
 
-- [ ] **Step 3: Narrow `_is_due()` to yesterday**
+- [ ] **Step 3: Keep `_is_due()` strictly before today**
 
 Change the final comparison in `cogs/updates.py`:
 
 ```python
-target_date = today - datetime.timedelta(days=1)
-return record_date == target_date
+return record_date < today
 ```
 
-Update the docstring to describe exact-yesterday eligibility.
+Update the docstring to describe before-today eligibility.
 
 - [ ] **Step 4: Run the focused tests**
 
@@ -207,7 +206,7 @@ Also add tests that:
 
 - daytime `_run_startup_catchup()` never calls `_run_attempt()`;
 - a `00:07` startup uses the `00:06` slot;
-- final-slot failure calls `_send_lark_dm()`;
+- final-slot failure stops after writing a Railway log and does not send a new external alert;
 - `_do_post()` returns true for a successful empty read and false for read/channel/record failures.
 
 - [ ] **Step 5: Run the coordinator tests and verify they fail**
@@ -260,15 +259,8 @@ async def _run_attempt(
             return
         if slot == _CHECK_SLOTS_BJT[-1]:
             self._completed_day = day
-            note = (
-                f"⚠️ 日常贴 {day:%Y/%m/%d} 凌晨发布未成功，"
-                "已停止自动处理，请人工检查。"
-            )
+            note = f"Daily update {day:%Y/%m/%d} midnight attempt failed."
             print(f"[updates] {note}", flush=True)
-            try:
-                await _send_lark_dm(note)
-            except Exception as exc:
-                print(f"[updates] Failed to send final Lark alert: {exc}", flush=True)
 ```
 
 Implement startup behavior:
@@ -337,7 +329,7 @@ Change the runtime source note to:
 Change the workflow note to:
 
 ```markdown
-- **Updates**: `cogs/updates.py` checks Lark Bitable at Beijing midnight, publishes only yesterday's `待发布` records, retries failures twice, and marks successful records `已发布`.
+- **Updates**: `cogs/updates.py` checks Lark Bitable at Beijing midnight, publishes `待发布` records dated before today, retries read/image/send failures twice, and marks successful records `已发布`.
 ```
 
 - [ ] **Step 2: Run documentation and regression checks**
