@@ -1,5 +1,7 @@
 # Updates Midnight Schedule Implementation Plan
 
+> **Final requirement correction (2026-07-23):** Eligibility is `record_date < today`, not exact-yesterday. Scheduler/read/image/send failures log and skip without new external alerts. A post-success `已发布` writeback failure keeps its existing immediate three-write retry and does not schedule another read that night.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the five-minute Lark Bitable polling loop with one Beijing-midnight check plus two failure-only retries, while ensuring only yesterday's records can publish.
@@ -12,10 +14,9 @@
 
 - Scheduled checks are Beijing time `00:01`, `00:06`, and `00:16`.
 - The later two checks read Lark only when an earlier attempt failed.
-- Only records whose date equals yesterday in Beijing time and whose status is `待发布` are eligible.
+- Only records whose date is before today in Beijing time and whose status is `待发布` are eligible.
 - Startup catch-up is allowed only from Beijing time `00:00` through `00:30`.
 - Daytime startup must not read Lark or publish updates.
-- Records that miss their one eligible midnight window must never be automatically backfilled.
 - Daily attempt state is process-local; no Supabase table or external scheduler is added.
 - Existing unrelated untracked files must not be staged or committed.
 
@@ -24,7 +25,7 @@
 ## File Structure
 
 - Modify `cogs/updates.py`: date eligibility, schedule constants and helpers, process-local scheduling state, startup catch-up, and publish-attempt result.
-- Modify `tests/test_updates.py`: date, time-window, retry, deduplication, and alert regression tests.
+- Modify `tests/test_updates.py`: date, time-window, retry, deduplication, and local failure regression tests.
 - Modify `README.md`: replace the obsolete five-minute polling and historical backfill descriptions.
 
 ### Task 1: Lock Eligibility to Yesterday
