@@ -291,10 +291,6 @@ class UpdatesCog(commands.Cog):
         self._completed_day = day
         note = f"Daily update {day:%Y/%m/%d} failed after all midnight slots."
         print(f"[updates] {note}", flush=True)
-        try:
-            await _send_lark_dm(note)
-        except Exception as exc:
-            print(f"[updates] Failed to send final Lark alert: {exc}", flush=True)
 
     async def _run_startup_catchup(self) -> None:
         now = datetime.datetime.now(_BJT)
@@ -441,14 +437,6 @@ class UpdatesCog(commands.Cog):
                         "restore to pending failed after midnight deadline."
                     )
                     print(f"[updates] {note}: {exc}", flush=True)
-                    try:
-                        await _send_lark_dm(note)
-                    except Exception as alert_exc:
-                        print(
-                            f"[updates] Failed to send manual-action Lark alert for "
-                            f"{record_id}: {alert_exc}",
-                            flush=True,
-                        )
                 continue
 
             try:
@@ -467,14 +455,6 @@ class UpdatesCog(commands.Cog):
                         "restore to pending failed after Discord send failure."
                     )
                     print(f"[updates] {note}: {restore_exc}", flush=True)
-                    try:
-                        await _send_lark_dm(note)
-                    except Exception as alert_exc:
-                        print(
-                            f"[updates] Failed to send manual-action Lark alert for "
-                            f"{record_id}: {alert_exc}",
-                            flush=True,
-                        )
                 continue
 
             print(f"[updates] Posted {record_id}, Discord message ID {msg.id}", flush=True)

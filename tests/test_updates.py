@@ -229,19 +229,22 @@ def test_startup_catchup_uses_latest_reached_slot(monkeypatch):
     run_attempt.assert_awaited_once_with(now, datetime.time(0, 6))
 
 
-def test_final_slot_failure_alerts_without_crashing(monkeypatch):
+def test_final_slot_failure_completes_without_external_alert(monkeypatch, capsys):
     cog = _make_cog()
     monkeypatch.setattr(cog, "_do_post", AsyncMock(return_value=False))
-    send_alert = AsyncMock(side_effect=RuntimeError("Lark unavailable"))
+    send_alert = AsyncMock()
     monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
 
     asyncio.run(cog._run_attempt(_bjt(0, 16), datetime.time(0, 16)))
 
-    send_alert.assert_awaited_once()
+    send_alert.assert_not_awaited()
     assert cog._completed_day == datetime.date(2026, 7, 24)
+    assert "Daily update 2026/07/24 failed after all midnight slots." in capsys.readouterr().out
 
 
-def test_earlier_slot_failure_after_deadline_completes_and_alerts(monkeypatch):
+def test_earlier_slot_failure_after_deadline_completes_without_external_alert(
+    monkeypatch, capsys
+):
     cog = _make_cog()
     clock = _Clock(_bjt(0, 1))
     monkeypatch.setattr(cog, "_now_bjt", clock)
@@ -257,10 +260,11 @@ def test_earlier_slot_failure_after_deadline_completes_and_alerts(monkeypatch):
     asyncio.run(cog._run_attempt(_bjt(0, 1), datetime.time(0, 1)))
 
     assert cog._completed_day == datetime.date(2026, 7, 24)
-    send_alert.assert_awaited_once()
+    send_alert.assert_not_awaited()
+    assert "Daily update 2026/07/24 failed after all midnight slots." in capsys.readouterr().out
 
 
-def test_final_slot_expired_while_waiting_for_lock_skips_bitable_read(monkeypatch):
+def test_final_slot_expired_while_waiting_for_lock_skips_bitable_read(monkeypatch, capsys):
     cog = _make_cog()
     clock = _Clock(_bjt(0, 16))
     monkeypatch.setattr(cog, "_now_bjt", clock)
@@ -282,8 +286,9 @@ def test_final_slot_expired_while_waiting_for_lock_skips_bitable_read(monkeypatc
     asyncio.run(run())
 
     read_records.assert_not_awaited()
-    send_alert.assert_awaited_once()
+    send_alert.assert_not_awaited()
     assert cog._completed_day == datetime.date(2026, 7, 24)
+    assert "Daily update 2026/07/24 failed after all midnight slots." in capsys.readouterr().out
 
 
 class _FakeMessage:
@@ -415,7 +420,7 @@ def test_do_post_restores_pending_without_sending_after_deadline(monkeypatch):
     ]
 
 
-def test_deadline_restore_failure_sends_manual_action_alert(monkeypatch):
+def test_deadline_restore_failure_logs_without_external_alert(monkeypatch, capsys):
     _allow_fake_channel(monkeypatch)
     cog = _make_cog(_FakeBot(_FakeChannel()))
     clock = _Clock(_bjt(0, 29, 59))
@@ -427,7 +432,7 @@ def test_deadline_restore_failure_sends_manual_action_alert(monkeypatch):
         elif status == upd._STATUS_PENDING:
             raise RuntimeError("restore failed")
 
-    send_alert = AsyncMock(side_effect=RuntimeError("Lark unavailable"))
+    send_alert = AsyncMock()
     monkeypatch.setattr(
         upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)])
     )
@@ -435,11 +440,13 @@ def test_deadline_restore_failure_sends_manual_action_alert(monkeypatch):
     monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
 
     assert asyncio.run(cog._do_post(today=_TODAY, deadline=_bjt(0, 30))) is False
-    send_alert.assert_awaited_once()
-    assert "recABC" in send_alert.await_args.args[0]
+    send_alert.assert_not_awaited()
+    output = capsys.readouterr().out
+    assert "Manual action required for record recABC" in output
+    assert output.isascii()
 
 
-def test_discord_failure_restore_failure_sends_manual_action_alert(monkeypatch):
+def test_discord_failure_restore_failure_logs_without_external_alert(monkeypatch, capsys):
     _allow_fake_channel(monkeypatch)
     cog = _make_cog(_FakeBot(_FailingChannel()))
 
@@ -447,7 +454,7 @@ def test_discord_failure_restore_failure_sends_manual_action_alert(monkeypatch):
         if status == upd._STATUS_PENDING:
             raise RuntimeError("restore failed")
 
-    send_alert = AsyncMock(side_effect=RuntimeError("Lark unavailable"))
+    send_alert = AsyncMock()
     monkeypatch.setattr(
         upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)])
     )
@@ -455,8 +462,10 @@ def test_discord_failure_restore_failure_sends_manual_action_alert(monkeypatch):
     monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
 
     assert asyncio.run(cog._do_post(today=_TODAY)) is False
-    send_alert.assert_awaited_once()
-    assert "recABC" in send_alert.await_args.args[0]
+    send_alert.assert_not_awaited()
+    output = capsys.readouterr().out
+    assert "Manual action required for record recABC" in output
+    assert output.isascii()
 
 
 def test_do_post_preserves_posting_discord_done_inside_deadline(monkeypatch):
@@ -564,9 +573,11 @@ def test_do_post_returns_false_after_done_status_failure(monkeypatch):
         "_update_record_status_with_retry",
         AsyncMock(side_effect=[None, RuntimeError("done status failed")]),
     )
-    monkeypatch.setattr(upd, "_send_lark_dm", AsyncMock())
+    send_alert = AsyncMock()
+    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
 
     assert asyncio.run(cog._do_post(today=_TODAY)) is False
+    send_alert.assert_awaited_once()
 
 
 def test_do_post_continues_after_one_record_failure(monkeypatch):
