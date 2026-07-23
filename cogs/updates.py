@@ -13,7 +13,16 @@ from discord.ext import commands, tasks
 
 _BJT = datetime.timezone(datetime.timedelta(hours=8))
 _UTC = datetime.timezone.utc
-_POLL_MINUTES = 5
+_CHECK_SLOTS_BJT = (
+    datetime.time(0, 1),
+    datetime.time(0, 6),
+    datetime.time(0, 16),
+)
+_CHECK_TIMES_UTC = [
+    datetime.time(16, 1, tzinfo=_UTC),
+    datetime.time(16, 6, tzinfo=_UTC),
+    datetime.time(16, 16, tzinfo=_UTC),
+]
 
 UPDATE_CHANNEL_ID: int = int(os.getenv("UPDATE_CHANNEL_ID", "0"))
 STAFF_CHAT_CHANNEL_ID: int = int(os.getenv("STAFF_CHAT_CHANNEL_ID", "0"))
@@ -69,6 +78,18 @@ def _is_due(rec: dict, today: Optional[datetime.date] = None) -> bool:
         return False
     target_date = today - datetime.timedelta(days=1)
     return record_date == target_date
+
+
+def _startup_window_contains(now: datetime.datetime) -> bool:
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + datetime.timedelta(minutes=30)
+    return start <= now <= end
+
+
+def _slot_for_time(now: datetime.datetime) -> Optional[datetime.time]:
+    current = now.time().replace(tzinfo=None)
+    reached = [slot for slot in _CHECK_SLOTS_BJT if slot <= current]
+    return reached[-1] if reached else None
 
 
 # ── Lark API client ───────────────────────────────────────────────────────────
@@ -198,18 +219,62 @@ class EditUpdateModal(discord.ui.Modal, title="Edit Update Message"):
 class UpdatesCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self._run_lock = asyncio.Lock()
+        self._completed_day: Optional[datetime.date] = None
+        self._attempted_slots: set[tuple[datetime.date, datetime.time]] = set()
         self.auto_post.start()
 
     def cog_unload(self) -> None:
         self.auto_post.cancel()
 
-    @tasks.loop(minutes=_POLL_MINUTES)
+    @tasks.loop(time=_CHECK_TIMES_UTC)
     async def auto_post(self) -> None:
-        await self._do_post()
+        now = datetime.datetime.now(_BJT)
+        slot = _slot_for_time(now)
+        if slot is not None:
+            await self._run_attempt(now, slot)
 
     @auto_post.before_loop
     async def before_auto_post(self) -> None:
         await self.bot.wait_until_ready()
+        await self._run_startup_catchup()
+
+    async def _run_attempt(
+        self, now: datetime.datetime, slot: datetime.time
+    ) -> None:
+        day = now.date()
+        key = (day, slot)
+        async with self._run_lock:
+            if self._completed_day == day or key in self._attempted_slots:
+                return
+            self._attempted_slots = {
+                attempted for attempted in self._attempted_slots if attempted[0] == day
+            }
+            self._attempted_slots.add(key)
+            success = await self._do_post(today=day)
+            if success:
+                self._completed_day = day
+                return
+            if slot == _CHECK_SLOTS_BJT[-1]:
+                self._completed_day = day
+                note = f"Daily update {day:%Y/%m/%d} failed after all midnight slots."
+                print(f"[updates] {note}", flush=True)
+                try:
+                    await _send_lark_dm(note)
+                except Exception as exc:
+                    print(f"[updates] Failed to send final Lark alert: {exc}", flush=True)
+
+    async def _run_startup_catchup(self) -> None:
+        now = datetime.datetime.now(_BJT)
+        if not _startup_window_contains(now):
+            return
+        first_check = now.replace(hour=0, minute=1, second=0, microsecond=0)
+        if now < first_check:
+            await asyncio.sleep((first_check - now).total_seconds())
+            now = datetime.datetime.now(_BJT)
+        slot = _slot_for_time(now)
+        if slot is not None and _startup_window_contains(now):
+            await self._run_attempt(now, slot)
 
     @discord.app_commands.command(name="edit_update", description="编辑已发布的 updates 消息（仅管理员）")
     async def edit_update(self, interaction: discord.Interaction) -> None:
@@ -260,28 +325,41 @@ class UpdatesCog(commands.Cog):
             except Exception:
                 pass
 
-    async def _do_post(self) -> None:
+    async def _do_post(self, today: Optional[datetime.date] = None) -> bool:
         try:
             records = await _read_bitable_records()
         except Exception as exc:
             print(f"[updates] Failed to read Bitable: {exc}", flush=True)
-            return
+            return False
 
-        due = [r for r in records if _is_due(r)]
+        due = []
+        for rec in records:
+            try:
+                if _is_due(rec, today=today):
+                    due.append(rec)
+            except (AttributeError, TypeError) as exc:
+                print(f"[updates] Invalid record, will retry: {exc}", flush=True)
+                return False
         if not due:
-            return
+            return True
 
         channel = self.bot.get_channel(UPDATE_CHANNEL_ID)
         if not isinstance(channel, discord.abc.Messageable):
             print(f"[updates] UPDATE_CHANNEL_ID {UPDATE_CHANNEL_ID} not found", flush=True)
-            return
+            return False
 
+        success = True
         for rec in due:
-            record_id = rec["record_id"]
-            fields = rec["fields"]
-            content = _extract_text(fields.get(_FLD_CONTENT))
-            attachments = fields.get(_FLD_IMAGE) or []
-            image_url = attachments[0].get("url") if attachments else None  # fix #5: .get avoids KeyError
+            try:
+                record_id = rec["record_id"]
+                fields = rec["fields"]
+                content = _extract_text(fields.get(_FLD_CONTENT))
+                attachments = fields.get(_FLD_IMAGE) or []
+                image_url = attachments[0].get("url") if attachments else None
+            except (AttributeError, IndexError, KeyError, TypeError) as exc:
+                print(f"[updates] Invalid record, will retry: {exc}", flush=True)
+                success = False
+                continue
 
             # Download image; skip record and retry next poll on failure
             file: Optional[discord.File] = None
@@ -291,6 +369,7 @@ class UpdatesCog(commands.Cog):
                     file = discord.File(io.BytesIO(image_bytes), filename="update.jpg")
                 except Exception as exc:
                     print(f"[updates] Image download failed for {record_id}, will retry: {exc}", flush=True)
+                    success = False
                     continue
 
             # Guard against double-post on crash: mark 发布中 before sending.
@@ -299,6 +378,7 @@ class UpdatesCog(commands.Cog):
             try:
                 await _update_record_status_with_retry(record_id, _STATUS_POSTING)
             except Exception as exc:
+                success = False
                 print(f"[updates] Could not mark {record_id} as 发布中, skipping: {exc}", flush=True)
                 continue
 
@@ -310,6 +390,7 @@ class UpdatesCog(commands.Cog):
                     msg = await channel.send(content=content)
             except Exception as exc:
                 print(f"[updates] Discord send failed for {record_id}: {exc}", flush=True)
+                success = False
                 try:
                     await _update_record_status_with_retry(record_id, _STATUS_PENDING)
                 except Exception:
@@ -322,9 +403,14 @@ class UpdatesCog(commands.Cog):
             try:
                 await _update_record_status_with_retry(record_id, _STATUS_DONE)
             except Exception as exc:
-                note = f"⚠️ 状态回写失败，请手动将 record {record_id} 改为「已发布」（消息已发出）"
+                success = False
+                note = f"Status writeback failed for record {record_id}; message was sent."
                 print(f"[updates] {note}: {exc}", flush=True)
-                await _send_lark_dm(note)
+                try:
+                    await _send_lark_dm(note)
+                except Exception as alert_exc:
+                    print(f"[updates] Failed to send status alert: {alert_exc}", flush=True)
+        return success
 
 
 async def setup(bot: commands.Bot) -> None:

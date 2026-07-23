@@ -1,5 +1,8 @@
 # tests/test_updates.py
 import datetime
+import asyncio
+from unittest.mock import AsyncMock, Mock
+
 import pytest
 import cogs.updates as upd
 
@@ -72,3 +75,219 @@ def test_is_due_multiple_records_filtered():
     ]
     due = [r for r in records if upd._is_due(r, today=_TODAY)]
     assert len(due) == 1
+
+
+# -- Midnight scheduling ------------------------------------------------------
+
+def _bjt(hour, minute, second=0):
+    return datetime.datetime(2026, 7, 24, hour, minute, second, tzinfo=upd._BJT)
+
+
+def test_slot_for_time_uses_latest_reached_slot():
+    assert upd._slot_for_time(_bjt(0, 0)) is None
+    assert upd._slot_for_time(_bjt(0, 1)) == datetime.time(0, 1)
+    assert upd._slot_for_time(_bjt(0, 10)) == datetime.time(0, 6)
+    assert upd._slot_for_time(_bjt(0, 20)) == datetime.time(0, 16)
+
+
+def test_startup_window_is_midnight_only():
+    assert upd._startup_window_contains(_bjt(0, 0))
+    assert upd._startup_window_contains(_bjt(0, 30))
+    assert not upd._startup_window_contains(_bjt(0, 30, 1))
+    assert not upd._startup_window_contains(_bjt(12, 0))
+
+
+def _make_cog(bot=None):
+    cog = upd.UpdatesCog.__new__(upd.UpdatesCog)
+    cog.bot = bot or Mock()
+    cog._run_lock = asyncio.Lock()
+    cog._completed_day = None
+    cog._attempted_slots = set()
+    return cog
+
+
+def _set_bjt_now(monkeypatch, now):
+    real_datetime = datetime.datetime
+
+    class FixedDateTime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now if tz is None else now.astimezone(tz)
+
+    monkeypatch.setattr(upd.datetime, "datetime", FixedDateTime)
+
+
+def test_success_stops_later_slots(monkeypatch):
+    cog = _make_cog()
+    do_post = AsyncMock(return_value=True)
+    monkeypatch.setattr(cog, "_do_post", do_post)
+
+    async def run():
+        await cog._run_attempt(_bjt(0, 1), datetime.time(0, 1))
+        await cog._run_attempt(_bjt(0, 6), datetime.time(0, 6))
+
+    asyncio.run(run())
+    do_post.assert_awaited_once_with(today=datetime.date(2026, 7, 24))
+
+
+def test_failure_allows_next_slot_but_not_duplicate_slot(monkeypatch):
+    cog = _make_cog()
+    do_post = AsyncMock(side_effect=[False, True])
+    monkeypatch.setattr(cog, "_do_post", do_post)
+
+    async def run():
+        await cog._run_attempt(_bjt(0, 1), datetime.time(0, 1))
+        await cog._run_attempt(_bjt(0, 1), datetime.time(0, 1))
+        await cog._run_attempt(_bjt(0, 6), datetime.time(0, 6))
+
+    asyncio.run(run())
+    assert do_post.await_count == 2
+
+
+def test_startup_catchup_ignores_daytime(monkeypatch):
+    cog = _make_cog()
+    run_attempt = AsyncMock()
+    monkeypatch.setattr(cog, "_run_attempt", run_attempt)
+    _set_bjt_now(monkeypatch, _bjt(12, 0))
+
+    asyncio.run(cog._run_startup_catchup())
+
+    run_attempt.assert_not_awaited()
+
+
+def test_startup_catchup_uses_latest_reached_slot(monkeypatch):
+    cog = _make_cog()
+    run_attempt = AsyncMock()
+    monkeypatch.setattr(cog, "_run_attempt", run_attempt)
+    now = _bjt(0, 7)
+    _set_bjt_now(monkeypatch, now)
+
+    asyncio.run(cog._run_startup_catchup())
+
+    run_attempt.assert_awaited_once_with(now, datetime.time(0, 6))
+
+
+def test_final_slot_failure_alerts_without_crashing(monkeypatch):
+    cog = _make_cog()
+    monkeypatch.setattr(cog, "_do_post", AsyncMock(return_value=False))
+    send_alert = AsyncMock(side_effect=RuntimeError("Lark unavailable"))
+    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
+
+    asyncio.run(cog._run_attempt(_bjt(0, 16), datetime.time(0, 16)))
+
+    send_alert.assert_awaited_once()
+    assert cog._completed_day == datetime.date(2026, 7, 24)
+
+
+class _FakeMessage:
+    id = 123
+
+
+class _FakeChannel:
+    async def send(self, **kwargs):
+        return _FakeMessage()
+
+
+class _FailingChannel(_FakeChannel):
+    async def send(self, **kwargs):
+        raise RuntimeError("Discord unavailable")
+
+
+class _FakeBot:
+    def __init__(self, channel):
+        self.channel = channel
+
+    def get_channel(self, channel_id):
+        return self.channel
+
+
+def _allow_fake_channel(monkeypatch):
+    monkeypatch.setattr(upd.discord.abc, "Messageable", _FakeChannel)
+
+
+def test_do_post_returns_true_after_successful_empty_read(monkeypatch):
+    cog = _make_cog()
+    monkeypatch.setattr(upd, "_read_bitable_records", AsyncMock(return_value=[]))
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is True
+
+
+def test_do_post_returns_true_after_successful_due_record(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    cog = _make_cog(_FakeBot(_FakeChannel()))
+    monkeypatch.setattr(upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)]))
+    monkeypatch.setattr(upd, "_update_record_status_with_retry", AsyncMock())
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is True
+
+
+def test_do_post_returns_false_after_read_failure(monkeypatch):
+    cog = _make_cog()
+    monkeypatch.setattr(
+        upd, "_read_bitable_records", AsyncMock(side_effect=RuntimeError("read failed"))
+    )
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+
+
+def test_do_post_returns_false_after_malformed_record(monkeypatch):
+    cog = _make_cog()
+    monkeypatch.setattr(upd, "_read_bitable_records", AsyncMock(return_value=["not a record"]))
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+
+
+def test_do_post_returns_false_when_channel_is_unavailable(monkeypatch):
+    cog = _make_cog(_FakeBot(None))
+    monkeypatch.setattr(upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)]))
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+
+
+def test_do_post_returns_false_after_image_failure(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    cog = _make_cog(_FakeBot(_FakeChannel()))
+    monkeypatch.setattr(
+        upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY, has_image=True)])
+    )
+    monkeypatch.setattr(
+        upd, "_download_bitable_image", AsyncMock(side_effect=RuntimeError("image failed"))
+    )
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+
+
+def test_do_post_returns_false_after_posting_status_failure(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    cog = _make_cog(_FakeBot(_FakeChannel()))
+    monkeypatch.setattr(upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)]))
+    monkeypatch.setattr(
+        upd,
+        "_update_record_status_with_retry",
+        AsyncMock(side_effect=RuntimeError("status failed")),
+    )
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+
+
+def test_do_post_returns_false_after_discord_send_failure(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    cog = _make_cog(_FakeBot(_FailingChannel()))
+    monkeypatch.setattr(upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)]))
+    monkeypatch.setattr(upd, "_update_record_status_with_retry", AsyncMock())
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+
+
+def test_do_post_returns_false_after_done_status_failure(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    cog = _make_cog(_FakeBot(_FakeChannel()))
+    monkeypatch.setattr(upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)]))
+    monkeypatch.setattr(
+        upd,
+        "_update_record_status_with_retry",
+        AsyncMock(side_effect=[None, RuntimeError("done status failed")]),
+    )
+    monkeypatch.setattr(upd, "_send_lark_dm", AsyncMock())
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
