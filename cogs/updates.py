@@ -284,7 +284,9 @@ class UpdatesCog(commands.Cog):
     async def _finish_failed_attempt(
         self, day: datetime.date, slot: datetime.time
     ) -> None:
-        if slot != _CHECK_SLOTS_BJT[-1]:
+        deadline = datetime.datetime.combine(day, datetime.time(0, 30), tzinfo=_BJT)
+        current = self._now_bjt()
+        if slot != _CHECK_SLOTS_BJT[-1] and current.date() == day and current <= deadline:
             return
         self._completed_day = day
         note = f"Daily update {day:%Y/%m/%d} failed after all midnight slots."
@@ -434,10 +436,19 @@ class UpdatesCog(commands.Cog):
                 try:
                     await _update_record_status_with_retry(record_id, _STATUS_PENDING)
                 except Exception as exc:
-                    print(
-                        f"[updates] Could not restore {record_id} to pending: {exc}",
-                        flush=True,
+                    note = (
+                        f"Manual action required for record {record_id}: "
+                        "restore to pending failed after midnight deadline."
                     )
+                    print(f"[updates] {note}: {exc}", flush=True)
+                    try:
+                        await _send_lark_dm(note)
+                    except Exception as alert_exc:
+                        print(
+                            f"[updates] Failed to send manual-action Lark alert for "
+                            f"{record_id}: {alert_exc}",
+                            flush=True,
+                        )
                 continue
 
             try:
@@ -450,8 +461,20 @@ class UpdatesCog(commands.Cog):
                 success = False
                 try:
                     await _update_record_status_with_retry(record_id, _STATUS_PENDING)
-                except Exception:
-                    pass
+                except Exception as restore_exc:
+                    note = (
+                        f"Manual action required for record {record_id}: "
+                        "restore to pending failed after Discord send failure."
+                    )
+                    print(f"[updates] {note}: {restore_exc}", flush=True)
+                    try:
+                        await _send_lark_dm(note)
+                    except Exception as alert_exc:
+                        print(
+                            f"[updates] Failed to send manual-action Lark alert for "
+                            f"{record_id}: {alert_exc}",
+                            flush=True,
+                        )
                 continue
 
             print(f"[updates] Posted {record_id}, Discord message ID {msg.id}", flush=True)

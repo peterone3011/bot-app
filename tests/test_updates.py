@@ -241,6 +241,25 @@ def test_final_slot_failure_alerts_without_crashing(monkeypatch):
     assert cog._completed_day == datetime.date(2026, 7, 24)
 
 
+def test_earlier_slot_failure_after_deadline_completes_and_alerts(monkeypatch):
+    cog = _make_cog()
+    clock = _Clock(_bjt(0, 1))
+    monkeypatch.setattr(cog, "_now_bjt", clock)
+
+    async def do_post(**kwargs):
+        clock.now = _bjt(0, 30, 1)
+        return False
+
+    send_alert = AsyncMock()
+    monkeypatch.setattr(cog, "_do_post", AsyncMock(side_effect=do_post))
+    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
+
+    asyncio.run(cog._run_attempt(_bjt(0, 1), datetime.time(0, 1)))
+
+    assert cog._completed_day == datetime.date(2026, 7, 24)
+    send_alert.assert_awaited_once()
+
+
 def test_final_slot_expired_while_waiting_for_lock_skips_bitable_read(monkeypatch):
     cog = _make_cog()
     clock = _Clock(_bjt(0, 16))
@@ -394,6 +413,50 @@ def test_do_post_restores_pending_without_sending_after_deadline(monkeypatch):
         ("recABC", upd._STATUS_POSTING),
         ("recABC", upd._STATUS_PENDING),
     ]
+
+
+def test_deadline_restore_failure_sends_manual_action_alert(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    cog = _make_cog(_FakeBot(_FakeChannel()))
+    clock = _Clock(_bjt(0, 29, 59))
+    monkeypatch.setattr(cog, "_now_bjt", clock)
+
+    async def update_status(record_id, status):
+        if status == upd._STATUS_POSTING:
+            clock.now = _bjt(0, 30, 1)
+        elif status == upd._STATUS_PENDING:
+            raise RuntimeError("restore failed")
+
+    send_alert = AsyncMock(side_effect=RuntimeError("Lark unavailable"))
+    monkeypatch.setattr(
+        upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)])
+    )
+    monkeypatch.setattr(upd, "_update_record_status_with_retry", AsyncMock(side_effect=update_status))
+    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
+
+    assert asyncio.run(cog._do_post(today=_TODAY, deadline=_bjt(0, 30))) is False
+    send_alert.assert_awaited_once()
+    assert "recABC" in send_alert.await_args.args[0]
+
+
+def test_discord_failure_restore_failure_sends_manual_action_alert(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    cog = _make_cog(_FakeBot(_FailingChannel()))
+
+    async def update_status(record_id, status):
+        if status == upd._STATUS_PENDING:
+            raise RuntimeError("restore failed")
+
+    send_alert = AsyncMock(side_effect=RuntimeError("Lark unavailable"))
+    monkeypatch.setattr(
+        upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)])
+    )
+    monkeypatch.setattr(upd, "_update_record_status_with_retry", AsyncMock(side_effect=update_status))
+    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+    send_alert.assert_awaited_once()
+    assert "recABC" in send_alert.await_args.args[0]
 
 
 def test_do_post_preserves_posting_discord_done_inside_deadline(monkeypatch):
