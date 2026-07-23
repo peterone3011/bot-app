@@ -74,7 +74,7 @@ def _is_due(rec: dict, today: Optional[datetime.date] = None) -> bool:
         return False
     try:
         record_date = datetime.datetime.fromtimestamp(int(date_ts) / 1000, tz=_BJT).date()
-    except (ValueError, TypeError):
+    except (OverflowError, OSError, ValueError, TypeError):
         return False
     target_date = today - datetime.timedelta(days=1)
     return record_date == target_date
@@ -90,6 +90,21 @@ def _slot_for_time(now: datetime.datetime) -> Optional[datetime.time]:
     current = now.time().replace(tzinfo=None)
     reached = [slot for slot in _CHECK_SLOTS_BJT if slot <= current]
     return reached[-1] if reached else None
+
+
+def _has_invalid_pending_date(rec: dict) -> bool:
+    """Return True when a pending record has a date that cannot be converted."""
+    fields = rec.get("fields", {})
+    if fields.get(_FLD_STATUS) != _STATUS_PENDING:
+        return False
+    date_ts = fields.get(_FLD_DATE)
+    if not date_ts:
+        return False
+    try:
+        datetime.datetime.fromtimestamp(int(date_ts) / 1000, tz=_BJT)
+    except (OverflowError, OSError, ValueError, TypeError):
+        return True
+    return False
 
 
 # ── Lark API client ───────────────────────────────────────────────────────────
@@ -230,9 +245,10 @@ class UpdatesCog(commands.Cog):
     @tasks.loop(time=_CHECK_TIMES_UTC)
     async def auto_post(self) -> None:
         now = datetime.datetime.now(_BJT)
-        slot = _slot_for_time(now)
-        if slot is not None:
-            await self._run_attempt(now, slot)
+        if _startup_window_contains(now):
+            slot = _slot_for_time(now)
+            if slot is not None:
+                await self._run_attempt(now, slot)
 
     @auto_post.before_loop
     async def before_auto_post(self) -> None:
@@ -333,22 +349,25 @@ class UpdatesCog(commands.Cog):
             return False
 
         due = []
+        success = True
         for rec in records:
             try:
                 if _is_due(rec, today=today):
                     due.append(rec)
+                elif _has_invalid_pending_date(rec):
+                    print("[updates] Invalid record date, will retry", flush=True)
+                    success = False
             except (AttributeError, TypeError) as exc:
                 print(f"[updates] Invalid record, will retry: {exc}", flush=True)
                 return False
         if not due:
-            return True
+            return success
 
         channel = self.bot.get_channel(UPDATE_CHANNEL_ID)
         if not isinstance(channel, discord.abc.Messageable):
             print(f"[updates] UPDATE_CHANNEL_ID {UPDATE_CHANNEL_ID} not found", flush=True)
             return False
 
-        success = True
         for rec in due:
             try:
                 record_id = rec["record_id"]

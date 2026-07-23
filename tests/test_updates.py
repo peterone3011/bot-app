@@ -90,6 +90,14 @@ def test_slot_for_time_uses_latest_reached_slot():
     assert upd._slot_for_time(_bjt(0, 20)) == datetime.time(0, 16)
 
 
+def test_check_times_are_the_required_utc_midnight_slots():
+    assert upd._CHECK_TIMES_UTC == [
+        datetime.time(16, 1, tzinfo=upd._UTC),
+        datetime.time(16, 6, tzinfo=upd._UTC),
+        datetime.time(16, 16, tzinfo=upd._UTC),
+    ]
+
+
 def test_startup_window_is_midnight_only():
     assert upd._startup_window_contains(_bjt(0, 0))
     assert upd._startup_window_contains(_bjt(0, 30))
@@ -142,6 +150,47 @@ def test_failure_allows_next_slot_but_not_duplicate_slot(monkeypatch):
 
     asyncio.run(run())
     assert do_post.await_count == 2
+
+
+def test_same_slot_concurrent_attempts_only_post_once(monkeypatch):
+    cog = _make_cog()
+    post_started = asyncio.Event()
+    allow_post_to_finish = asyncio.Event()
+
+    async def do_post(**kwargs):
+        post_started.set()
+        await allow_post_to_finish.wait()
+        return False
+
+    do_post_mock = AsyncMock(side_effect=do_post)
+    monkeypatch.setattr(cog, "_do_post", do_post_mock)
+
+    async def run():
+        first = asyncio.create_task(
+            cog._run_attempt(_bjt(0, 1), datetime.time(0, 1))
+        )
+        await post_started.wait()
+        second = asyncio.create_task(
+            cog._run_attempt(_bjt(0, 1), datetime.time(0, 1))
+        )
+        await asyncio.sleep(0)
+        allow_post_to_finish.set()
+        await asyncio.gather(first, second)
+
+    asyncio.run(run())
+
+    do_post_mock.assert_awaited_once_with(today=datetime.date(2026, 7, 24))
+
+
+def test_auto_post_ignores_delayed_daytime_callback(monkeypatch):
+    cog = _make_cog()
+    run_attempt = AsyncMock()
+    monkeypatch.setattr(cog, "_run_attempt", run_attempt)
+    _set_bjt_now(monkeypatch, _bjt(12, 0))
+
+    asyncio.run(upd.UpdatesCog.auto_post.coro(cog))
+
+    run_attempt.assert_not_awaited()
 
 
 def test_startup_catchup_ignores_daytime(monkeypatch):
@@ -237,6 +286,38 @@ def test_do_post_returns_false_after_malformed_record(monkeypatch):
     assert asyncio.run(cog._do_post(today=_TODAY)) is False
 
 
+@pytest.mark.parametrize("exception", [OverflowError, OSError])
+def test_is_due_skips_out_of_range_timestamp(exception, monkeypatch):
+    real_datetime = datetime.datetime
+
+    class RaisingDateTime(real_datetime):
+        @classmethod
+        def fromtimestamp(cls, timestamp, tz=None):
+            raise exception("out of range")
+
+    monkeypatch.setattr(upd.datetime, "datetime", RaisingDateTime)
+
+    assert upd._is_due(_rec(ts=_TS_YESTERDAY), today=_TODAY) is False
+
+
+@pytest.mark.parametrize("exception", [OverflowError, OSError])
+def test_do_post_returns_false_for_out_of_range_record_date(exception, monkeypatch):
+    real_datetime = datetime.datetime
+
+    class RaisingDateTime(real_datetime):
+        @classmethod
+        def fromtimestamp(cls, timestamp, tz=None):
+            raise exception("out of range")
+
+    monkeypatch.setattr(upd.datetime, "datetime", RaisingDateTime)
+    cog = _make_cog()
+    monkeypatch.setattr(
+        upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)])
+    )
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+
+
 def test_do_post_returns_false_when_channel_is_unavailable(monkeypatch):
     cog = _make_cog(_FakeBot(None))
     monkeypatch.setattr(upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)]))
@@ -291,3 +372,29 @@ def test_do_post_returns_false_after_done_status_failure(monkeypatch):
     monkeypatch.setattr(upd, "_send_lark_dm", AsyncMock())
 
     assert asyncio.run(cog._do_post(today=_TODAY)) is False
+
+
+def test_do_post_continues_after_one_record_failure(monkeypatch):
+    _allow_fake_channel(monkeypatch)
+    channel = _FakeChannel()
+    cog = _make_cog(_FakeBot(channel))
+    failed = _rec(_TS_YESTERDAY)
+    failed["record_id"] = "recFailure"
+    succeeded = _rec(_TS_YESTERDAY)
+    succeeded["record_id"] = "recSuccess"
+    monkeypatch.setattr(
+        upd, "_read_bitable_records", AsyncMock(return_value=[failed, succeeded])
+    )
+
+    async def update_status(record_id, status):
+        if record_id == "recFailure" and status == upd._STATUS_POSTING:
+            raise RuntimeError("write failed")
+
+    update_status_mock = AsyncMock(side_effect=update_status)
+    monkeypatch.setattr(upd, "_update_record_status_with_retry", update_status_mock)
+
+    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+    assert update_status_mock.await_args_list[-2:] == [
+        (("recSuccess", upd._STATUS_POSTING),),
+        (("recSuccess", upd._STATUS_DONE),),
+    ]
