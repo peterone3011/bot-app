@@ -5,11 +5,12 @@ import cogs.updates as upd
 
 _TODAY = datetime.date(2026, 5, 28)
 _TS_TODAY  = 1779926400000  # 2026-05-28 00:00 UTC (BJT 08:00, date 2026-05-28)
-_TS_PAST   = 1779062400000  # 2026-05-18 00:00 UTC
+_TS_YESTERDAY = 1779840000000
+_TS_OLDER = 1779062400000
 _TS_FUTURE = 1780531200000  # 2026-06-04 00:00 UTC
 
 
-def _rec(ts=_TS_PAST, status="待发布", content="text", has_image=False):
+def _rec(ts=_TS_OLDER, status="待发布", content="text", has_image=False):
     fields = {
         upd._FLD_DATE: str(ts),
         upd._FLD_STATUS: status,
@@ -38,8 +39,11 @@ def test_extract_text_skips_non_dict():
 
 # ── _is_due ───────────────────────────────────────────────────────────────────
 
-def test_is_due_past_date():
-    assert upd._is_due(_rec(ts=_TS_PAST), today=_TODAY) is True
+def test_is_due_yesterday():
+    assert upd._is_due(_rec(ts=_TS_YESTERDAY), today=_TODAY) is True
+
+def test_is_due_older_record_is_not_backfilled():
+    assert upd._is_due(_rec(ts=_TS_OLDER), today=_TODAY) is False
 
 def test_is_due_today_not_yet():
     # record dated today → not due until tomorrow's poll
@@ -62,8 +66,8 @@ def test_is_due_invalid_timestamp():
 
 def test_is_due_multiple_records_filtered():
     records = [
-        _rec(ts=_TS_PAST, status="待发布"),
-        _rec(ts=_TS_PAST, status="已发布"),
+        _rec(ts=_TS_YESTERDAY, status="待发布"),
+        _rec(ts=_TS_YESTERDAY, status="已发布"),
         _rec(ts=_TS_FUTURE, status="待发布"),
     ]
     due = [r for r in records if upd._is_due(r, today=_TODAY)]

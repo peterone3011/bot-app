@@ -54,7 +54,7 @@ def _extract_text(value) -> str:
 
 
 def _is_due(rec: dict, today: Optional[datetime.date] = None) -> bool:
-    """Return True if a record is 待发布 and its date has already passed (date < today BJT)."""
+    """Return True if a pending record is dated exactly yesterday in BJT."""
     if today is None:
         today = datetime.datetime.now(_BJT).date()
     fields = rec.get("fields", {})
@@ -67,7 +67,8 @@ def _is_due(rec: dict, today: Optional[datetime.date] = None) -> bool:
         record_date = datetime.datetime.fromtimestamp(int(date_ts) / 1000, tz=_BJT).date()
     except (ValueError, TypeError):
         return False
-    return record_date < today
+    target_date = today - datetime.timedelta(days=1)
+    return record_date == target_date
 
 
 # ── Lark API client ───────────────────────────────────────────────────────────
