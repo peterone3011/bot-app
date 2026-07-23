@@ -63,7 +63,7 @@ def _extract_text(value) -> str:
 
 
 def _is_due(rec: dict, today: Optional[datetime.date] = None) -> bool:
-    """Return True if a pending record is dated exactly yesterday in BJT."""
+    """Return True if a pending record is dated before today in BJT."""
     if today is None:
         today = datetime.datetime.now(_BJT).date()
     fields = rec.get("fields", {})
@@ -76,8 +76,7 @@ def _is_due(rec: dict, today: Optional[datetime.date] = None) -> bool:
         record_date = datetime.datetime.fromtimestamp(int(date_ts) / 1000, tz=_BJT).date()
     except (OverflowError, OSError, ValueError, TypeError):
         return False
-    target_date = today - datetime.timedelta(days=1)
-    return record_date == target_date
+    return record_date < today
 
 
 def _startup_window_contains(now: datetime.datetime) -> bool:
@@ -463,7 +462,6 @@ class UpdatesCog(commands.Cog):
             try:
                 await _update_record_status_with_retry(record_id, _STATUS_DONE)
             except Exception as exc:
-                success = False
                 note = f"Status writeback failed for record {record_id}; message was sent."
                 print(f"[updates] {note}: {exc}", flush=True)
                 try:

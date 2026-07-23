@@ -45,8 +45,8 @@ def test_extract_text_skips_non_dict():
 def test_is_due_yesterday():
     assert upd._is_due(_rec(ts=_TS_YESTERDAY), today=_TODAY) is True
 
-def test_is_due_older_record_is_not_backfilled():
-    assert upd._is_due(_rec(ts=_TS_OLDER), today=_TODAY) is False
+def test_is_due_older_record():
+    assert upd._is_due(_rec(ts=_TS_OLDER), today=_TODAY) is True
 
 def test_is_due_today_not_yet():
     # record dated today → not due until tomorrow's poll
@@ -564,7 +564,7 @@ def test_do_post_returns_false_after_discord_send_failure(monkeypatch):
     assert asyncio.run(cog._do_post(today=_TODAY)) is False
 
 
-def test_do_post_returns_false_after_done_status_failure(monkeypatch):
+def test_do_post_stops_after_done_status_failure(monkeypatch):
     _allow_fake_channel(monkeypatch)
     cog = _make_cog(_FakeBot(_FakeChannel()))
     monkeypatch.setattr(upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)]))
@@ -576,7 +576,7 @@ def test_do_post_returns_false_after_done_status_failure(monkeypatch):
     send_alert = AsyncMock()
     monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
 
-    assert asyncio.run(cog._do_post(today=_TODAY)) is False
+    assert asyncio.run(cog._do_post(today=_TODAY)) is True
     send_alert.assert_awaited_once()
 
 
