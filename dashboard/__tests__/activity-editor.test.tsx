@@ -35,6 +35,7 @@ const campaign: ActivityCampaign = {
   winner_message: "Winner **{code}**",
   sold_out_message: "Sold out",
   closed_message: "Closed",
+  ends_at: "2099-08-01T12:00:00.000Z",
   created_at: "",
   updated_at: "",
   published_at: null,
@@ -84,10 +85,11 @@ describe("ActivityEditor", () => {
     )
   })
 
-  it("locks channel, winner limit, modal title and questions after publish", () => {
+  it("locks channel, end time, winner limit, modal title and questions after publish", () => {
     render(<ActivityEditor initial={{ ...campaign, status: "active" }} />)
 
     expect(screen.getByLabelText("Discord Channel")).toBeDisabled()
+    expect(screen.getByLabelText("Activity End Time")).toBeDisabled()
     expect(screen.getByLabelText("Winner Limit")).toBeDisabled()
     expect(screen.getByLabelText("Modal Title")).toBeDisabled()
     expect(screen.queryByRole("button", { name: "Add Question" })).toBeNull()

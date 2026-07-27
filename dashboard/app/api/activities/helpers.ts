@@ -56,6 +56,7 @@ export function campaignFields(
   const allowed = [
     "name",
     "winner_limit",
+    "ends_at",
     "discord_guild_id",
     "discord_channel_id",
     "embed_title",

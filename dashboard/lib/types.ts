@@ -61,6 +61,7 @@ export interface ActivityCampaign {
   winner_message: string
   sold_out_message: string
   closed_message: string
+  ends_at: string | null
   created_at: string
   updated_at: string
   published_at: string | null

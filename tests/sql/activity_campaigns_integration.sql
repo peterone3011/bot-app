@@ -15,6 +15,8 @@ declare
     v_function text;
     v_question_count integer;
     v_revision bigint;
+    v_submitted_at timestamptz;
+    v_submitted_at_after timestamptz;
 begin
     foreach v_role in array array['anon', 'authenticated'] loop
         foreach v_table in array array[
@@ -110,6 +112,7 @@ begin
         jsonb_build_object(
             'name', 'Activity integration test saved',
             'winner_limit', 20,
+            'ends_at', (now() + interval '1 day')::text,
             'discord_channel_id', '2',
             'button_label', 'Join',
             'modal_title', 'Test activity',
@@ -157,6 +160,25 @@ begin
         )
     );
 
+    update public.activity_campaigns
+       set ends_at = now() - interval '1 minute'
+     where id = v_campaign_id;
+    select revision
+      into v_revision
+      from public.activity_campaigns
+     where id = v_campaign_id;
+    select result.outcome, result.existing_message_id
+      into v_outcome, v_existing_message_id
+      from public.activate_activity_campaign(
+          v_campaign_id, v_revision, '1', 'expired-message'
+      ) result;
+    if v_outcome <> 'invalid_end_time' then
+        raise exception 'expired draft activation was not rejected: %', v_outcome;
+    end if;
+
+    update public.activity_campaigns
+       set ends_at = now() + interval '1 day'
+     where id = v_campaign_id;
     select revision
       into v_revision
       from public.activity_campaigns
@@ -200,6 +222,11 @@ begin
     if v_outcome <> 'winner' or v_code <> 'ORDERED-1' then
         raise exception 'first ordered claim failed: %, %', v_outcome, v_code;
     end if;
+    select submitted_at
+      into v_submitted_at
+      from public.activity_submissions
+     where campaign_id = v_campaign_id
+       and discord_user_id = '1001';
 
     select r.outcome, r.reward_code
       into v_outcome, v_code
@@ -209,11 +236,22 @@ begin
     if v_outcome <> 'existing_winner' or v_code <> 'ORDERED-1' then
         raise exception 'duplicate winner recovery failed: %, %', v_outcome, v_code;
     end if;
+    select submitted_at
+      into v_submitted_at_after
+      from public.activity_submissions
+     where campaign_id = v_campaign_id
+       and discord_user_id = '1001'
+       and discord_username = 'first-again'
+       and answers = '{"fp_id":"Changed"}'::jsonb
+       and participant_key_normalized = 'changed';
+    if v_submitted_at_after is null or v_submitted_at_after <> v_submitted_at then
+        raise exception 'duplicate winner did not replace answers in place';
+    end if;
 
     select r.outcome, r.reward_code
       into v_outcome, v_code
       from public.claim_activity_reward(
-          v_campaign_id, '1002', 'conflict', '{"fp_id":"alpha"}', 'a l p h a'
+          v_campaign_id, '1002', 'conflict', '{"fp_id":"changed"}', 'c h a n g e d'
       ) r;
     if v_outcome <> 'participant_key_taken' or v_code is not null then
         raise exception 'participant key conflict failed: %, %', v_outcome, v_code;
@@ -250,6 +288,28 @@ begin
       ) r;
     if v_outcome <> 'existing_sold_out' or v_code is not null then
         raise exception 'duplicate sold-out recovery failed: %, %', v_outcome, v_code;
+    end if;
+
+    update public.activity_campaigns
+       set ends_at = now() - interval '1 second'
+     where id = v_campaign_id;
+    select r.outcome, r.reward_code
+      into v_outcome, v_code
+      from public.claim_activity_reward(
+          v_campaign_id, '1001', 'expired-update',
+          '{"fp_id":"Must Not Update"}', 'Must Not Update'
+      ) r;
+    if v_outcome <> 'closed' or v_code is not null then
+        raise exception 'expired outcome failed: %, %', v_outcome, v_code;
+    end if;
+    if exists (
+        select 1
+          from public.activity_submissions
+         where campaign_id = v_campaign_id
+           and discord_user_id = '1001'
+           and discord_username = 'expired-update'
+    ) then
+        raise exception 'expired repeat submission updated stored answers';
     end if;
 
     update public.activity_campaigns

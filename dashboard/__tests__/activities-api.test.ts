@@ -83,6 +83,7 @@ const campaign = {
   winner_message: "Winner **{code}**",
   sold_out_message: "Sold out",
   closed_message: "Closed",
+  ends_at: "2099-08-01T12:00:00.000Z",
   created_at: "2026-07-27T00:00:00Z",
   updated_at: "2026-07-27T00:00:00Z",
   published_at: null,
@@ -195,6 +196,20 @@ describe("activity APIs", () => {
       "https://discord.com/api/v10/channels/1519235126201024633/messages/discord-message",
       expect.objectContaining({ method: "DELETE" })
     )
+  })
+
+  it("rejects publication when the activity has no end time", async () => {
+    const noEnd = { ...campaign, ends_at: null }
+    mocks.from.mockReturnValueOnce(query({ data: noEnd, error: null }))
+    const { POST } = await import("@/app/api/activities/[id]/publish/route")
+
+    const response = await POST(
+      request("/api/activities/c1/publish", "POST") as any,
+      { params: { id: "c1" } }
+    )
+
+    expect(response.status).toBe(400)
+    expect(mocks.fetch).not.toHaveBeenCalled()
   })
 
   it("deletes its Discord message when another publish wins activation", async () => {

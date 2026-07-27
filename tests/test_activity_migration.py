@@ -3,6 +3,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase" / "migrations" / "20260727_activity_campaigns.sql"
+REPEAT_AND_EXPIRY_MIGRATION = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260727201000_activity_repeat_submission_and_expiry.sql"
+)
 
 
 def migration_sql() -> str:
@@ -54,6 +60,20 @@ def test_claim_rpc_has_required_outcomes_and_locking():
         assert f"'{outcome}'" in sql
     assert "for update" in sql
     assert "order by position" in sql
+
+
+def test_repeat_submission_and_expiry_migration_updates_answers_and_blocks_expired_claims():
+    sql = REPEAT_AND_EXPIRY_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "add column if not exists ends_at timestamptz" in sql
+    assert "where status = 'active'" in sql
+    assert "and ends_at is null" in sql
+    assert "v_campaign.ends_at <= now()" in sql
+    assert "discord_username = p_discord_username" in sql
+    assert "answers = coalesce(p_answers, '{}'::jsonb)" in sql
+    assert "participant_key_normalized = v_participant_key" in sql
+    assert "s.id <> v_existing.id" in sql
+    assert "submitted_at =" not in sql
+    assert "invalid_end_time" in sql
 
 
 def test_dashboard_mutations_use_locking_database_rpcs():

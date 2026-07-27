@@ -29,6 +29,7 @@ export async function POST(req: NextRequest, { params }: Context) {
       id,
       status: "draft",
       discord_message_id: null,
+      ends_at: null,
       published_at: null,
       closed_at: null,
     })

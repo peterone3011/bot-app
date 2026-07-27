@@ -95,6 +95,16 @@ export function validateCampaignInput(input: unknown): string | null {
   if (!(input.winner_message as string).includes("{code}")) {
     return "Winner message must include {code}"
   }
+  if (
+    input.ends_at !== null &&
+    input.ends_at !== undefined &&
+    (
+      typeof input.ends_at !== "string" ||
+      !Number.isFinite(Date.parse(input.ends_at))
+    )
+  ) {
+    return "Activity end time is invalid"
+  }
 
   const questions = input.questions
   if (!Array.isArray(questions) || questions.length < 1 || questions.length > 5) {
@@ -177,6 +187,7 @@ const LOCKED_AFTER_PUBLISH = [
   "discord_guild_id",
   "discord_channel_id",
   "winner_limit",
+  "ends_at",
   "modal_title",
   "questions",
   "codes",

@@ -39,6 +39,18 @@ function newQuestion(position: number, campaignId: string): ActivityQuestion {
   }
 }
 
+function toBeijingInputValue(value: string | null): string {
+  if (!value) return ""
+  const timestamp = Date.parse(value)
+  if (!Number.isFinite(timestamp)) return ""
+  return new Date(timestamp + 8 * 60 * 60 * 1000).toISOString().slice(0, 16)
+}
+
+function fromBeijingInputValue(value: string): string | null {
+  if (!value) return null
+  return new Date(`${value}:00+08:00`).toISOString()
+}
+
 export function ActivityEditor({ initial }: { initial: ActivityCampaign }) {
   const router = useRouter()
   const [campaign, setCampaign] = useState(initial)
@@ -221,6 +233,17 @@ export function ActivityEditor({ initial }: { initial: ActivityCampaign }) {
         <div className="space-y-1.5">
           <Label htmlFor="winner-limit">Winner Limit</Label>
           <Input id="winner-limit" aria-label="Winner Limit" type="number" min={1} value={campaign.winner_limit} onChange={(event) => update("winner_limit", Number(event.target.value))} disabled={locked} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="activity-end-time">Activity End Time (Beijing)</Label>
+          <Input
+            id="activity-end-time"
+            aria-label="Activity End Time"
+            type="datetime-local"
+            value={toBeijingInputValue(campaign.ends_at)}
+            onChange={(event) => update("ends_at", fromBeijingInputValue(event.target.value))}
+            disabled={locked}
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="modal-title">Modal Title</Label>

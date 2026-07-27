@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from typing import Any
 
 import discord
@@ -22,6 +23,19 @@ PARTICIPANT_KEY_TAKEN_MESSAGE = (
     "Please check it and try again."
 )
 UNAVAILABLE_MESSAGE = "This activity is no longer available."
+
+
+def activity_has_ended(activity: dict[str, Any]) -> bool:
+    ends_at = activity.get("ends_at")
+    if not isinstance(ends_at, str) or not ends_at:
+        return True
+    try:
+        parsed = datetime.fromisoformat(ends_at.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed <= datetime.now(timezone.utc)
 
 
 class ActivityModal(discord.ui.Modal):
@@ -155,7 +169,7 @@ class ActivityJoinButton(discord.ui.Button):
                 UNAVAILABLE_MESSAGE, ephemeral=True
             )
             return
-        if activity.get("status") != "active":
+        if activity.get("status") != "active" or activity_has_ended(activity):
             await interaction.response.send_message(
                 activity["closed_message"], ephemeral=True
             )

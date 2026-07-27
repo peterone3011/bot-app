@@ -26,6 +26,7 @@ export function ActivityList({ campaigns }: { campaigns: ActivityCampaign[] }) {
     const body = {
       name: name.trim(),
       winner_limit: 20,
+      ends_at: null,
       discord_guild_id: null,
       discord_channel_id: null,
       embed_title: "",

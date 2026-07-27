@@ -59,6 +59,13 @@ export async function POST(req: NextRequest, { params }: Context) {
   if (validationError) {
     return NextResponse.json({ error: validationError }, { status: 400 })
   }
+  const endsAt = activity.ends_at ? Date.parse(activity.ends_at) : Number.NaN
+  if (!Number.isFinite(endsAt) || endsAt <= Date.now()) {
+    return NextResponse.json(
+      { error: "Activity end time must be in the future" },
+      { status: 400 }
+    )
+  }
 
   const { data: codeRows, error: codeError } = await supabase
     .from("activity_codes")
@@ -142,6 +149,7 @@ export async function POST(req: NextRequest, { params }: Context) {
     }
     const invalidDraft = [
       "invalid_code_count",
+      "invalid_end_time",
       "invalid_questions",
       "stale_draft",
     ].includes(activation?.outcome)

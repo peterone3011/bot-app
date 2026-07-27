@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -12,6 +13,7 @@ def campaign(*, status: str = "active", questions: list[dict] | None = None) -> 
     return {
         "id": "campaign-1",
         "status": status,
+        "ends_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
         "modal_title": "FP Player Survey",
         "winner_message": "Winner: **{code}**",
         "sold_out_message": "All gone.",
@@ -172,6 +174,26 @@ def test_join_button_returns_closed_copy_without_opening_modal(monkeypatch):
         activities,
         "aget_activity_by_message",
         AsyncMock(return_value=campaign(status="closed")),
+    )
+    ctx = interaction()
+
+    asyncio.run(activities.ActivityJoinButton().callback(ctx))
+
+    ctx.response.send_message.assert_awaited_once_with(
+        "This activity has ended.", ephemeral=True
+    )
+    ctx.response.send_modal.assert_not_awaited()
+
+
+def test_join_button_returns_closed_copy_when_activity_has_expired(monkeypatch):
+    expired = campaign()
+    expired["ends_at"] = (
+        datetime.now(timezone.utc) - timedelta(seconds=1)
+    ).isoformat()
+    monkeypatch.setattr(
+        activities,
+        "aget_activity_by_message",
+        AsyncMock(return_value=expired),
     )
     ctx = interaction()
 

@@ -78,6 +78,7 @@ const campaign: ActivityCampaign = {
   winner_message: "Congratulations! **{code}**",
   sold_out_message: "All codes are gone.",
   closed_message: "This activity has ended.",
+  ends_at: "2099-08-01T12:00:00.000Z",
   created_at: "2026-07-27T00:00:00Z",
   updated_at: "2026-07-27T00:00:00Z",
   published_at: null,
@@ -156,6 +157,12 @@ describe("validateCampaignInput", () => {
       validateCampaignInput({ ...campaign, discord_guild_id: "guild" })
     ).toMatch(/snowflake/i)
   })
+
+  it("rejects an invalid activity end time when supplied", () => {
+    expect(
+      validateCampaignInput({ ...campaign, ends_at: "not-a-date" })
+    ).toMatch(/end time/i)
+  })
 })
 
 
@@ -177,7 +184,7 @@ describe("reward code parsing", () => {
 
 
 describe("published campaign behavior", () => {
-  it("locks channel, questions, winner limit, modal title, and code pool", () => {
+  it("locks channel, end time, questions, winner limit, modal title, and code pool", () => {
     const active = { ...campaign, status: "active" as const }
     expect(validatePublishedPatch(active, { embed_title: "Updated" })).toBeNull()
     expect(validatePublishedPatch(active, { winner_message: "New {code}" })).toBeNull()
@@ -186,6 +193,9 @@ describe("published campaign behavior", () => {
     ).toMatch(/locked/i)
     expect(validatePublishedPatch(active, { winner_limit: 30 })).toMatch(/locked/i)
     expect(validatePublishedPatch(active, { modal_title: "Changed" })).toMatch(/locked/i)
+    expect(
+      validatePublishedPatch(active, { ends_at: "2099-08-02T12:00:00.000Z" })
+    ).toMatch(/locked/i)
     expect(validatePublishedPatch(active, { questions: [] })).toMatch(/locked/i)
     expect(validatePublishedPatch(active, { codes: ["X"] })).toMatch(/locked/i)
   })
