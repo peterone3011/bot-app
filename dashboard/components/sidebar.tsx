@@ -12,12 +12,14 @@ import {
   Users,
   LogOut,
   Trophy,
+  ClipboardList,
 } from "lucide-react"
 
 const navItems = [
   { href: "/dashboard/embeds", label: "Embed 消息",   icon: MessageSquare, short: "E" },
   { href: "/dashboard/roles",  label: "身份组管理",    icon: Users,         short: "R" },
   { href: "/dashboard/bigwin", label: "Big Win 记录", icon: Trophy,        short: "B" },
+  { href: "/dashboard/activities", label: "Activity Management", icon: ClipboardList, short: "A" },
 ]
 
 function BrandMark({ size = 32 }: { size?: number }) {

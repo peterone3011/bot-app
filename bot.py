@@ -43,6 +43,7 @@ async def main():
             await bot.load_extension("cogs.community_metrics")
             await bot.load_extension("cogs.screenshot_activity")
             await bot.load_extension("cogs.autorole")
+            await bot.load_extension("cogs.activities")
 
             @bot.tree.error
             async def on_app_command_error(interaction: discord.Interaction, error: Exception):

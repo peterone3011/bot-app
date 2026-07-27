@@ -14,5 +14,6 @@ export const config = {
     "/api/embeds/:path*",
     "/api/discord/:path*",
     "/api/roles/:path*",
+    "/api/activities/:path*",
   ],
 }
