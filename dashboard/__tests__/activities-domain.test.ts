@@ -108,7 +108,7 @@ describe("validateCampaignInput", () => {
   })
 
   it("rejects zero or more than five questions", () => {
-    expect(validateCampaignInput({ ...campaign, questions: [] })).toMatch(/1-5/)
+    expect(validateCampaignInput({ ...campaign, questions: [] })).toContain("1–5")
     expect(
       validateCampaignInput({
         ...campaign,
@@ -120,7 +120,7 @@ describe("validateCampaignInput", () => {
           prefill_discord_username: index === 0,
         })),
       })
-    ).toMatch(/1-5/)
+    ).toContain("1–5")
   })
 
   it("rejects duplicate field keys and multiple participant keys", () => {
@@ -136,7 +136,7 @@ describe("validateCampaignInput", () => {
           },
         ],
       })
-    ).toMatch(/field key/i)
+    ).toContain("字段标识")
 
     expect(
       validateCampaignInput({
@@ -146,22 +146,22 @@ describe("validateCampaignInput", () => {
           is_participant_key: true,
         })),
       })
-    ).toMatch(/unique participant/i)
+    ).toContain("唯一参与者")
   })
 
   it("rejects non-numeric Discord snowflakes", () => {
     expect(
       validateCampaignInput({ ...campaign, discord_channel_id: "channel" })
-    ).toMatch(/snowflake/i)
+    ).toContain("Discord 频道 ID")
     expect(
       validateCampaignInput({ ...campaign, discord_guild_id: "guild" })
-    ).toMatch(/snowflake/i)
+    ).toContain("Discord 服务器 ID")
   })
 
   it("rejects an invalid activity end time when supplied", () => {
     expect(
       validateCampaignInput({ ...campaign, ends_at: "not-a-date" })
-    ).toMatch(/end time/i)
+    ).toContain("结束时间")
   })
 })
 
@@ -176,7 +176,7 @@ describe("reward code parsing", () => {
 
   it("rejects duplicate codes and validates the exact publish count", () => {
     expect(() => parseRewardCodes("A\nA")).toThrow(ActivityValidationError)
-    expect(() => parseRewardCodes("A\nB", 20)).toThrow(/exactly 20/)
+    expect(() => parseRewardCodes("A\nB", 20)).toThrow("必须正好导入 20 个福利码")
     expect(parseRewardCodes(Array.from({ length: 20 }, (_, i) => `C${i}`).join("\n"), 20))
       .toHaveLength(20)
   })
@@ -190,14 +190,14 @@ describe("published campaign behavior", () => {
     expect(validatePublishedPatch(active, { winner_message: "New {code}" })).toBeNull()
     expect(
       validatePublishedPatch(active, { discord_channel_id: "999" })
-    ).toMatch(/locked/i)
-    expect(validatePublishedPatch(active, { winner_limit: 30 })).toMatch(/locked/i)
-    expect(validatePublishedPatch(active, { modal_title: "Changed" })).toMatch(/locked/i)
+    ).toContain("发布后不可修改")
+    expect(validatePublishedPatch(active, { winner_limit: 30 })).toContain("发布后不可修改")
+    expect(validatePublishedPatch(active, { modal_title: "Changed" })).toContain("发布后不可修改")
     expect(
       validatePublishedPatch(active, { ends_at: "2099-08-02T12:00:00.000Z" })
-    ).toMatch(/locked/i)
-    expect(validatePublishedPatch(active, { questions: [] })).toMatch(/locked/i)
-    expect(validatePublishedPatch(active, { codes: ["X"] })).toMatch(/locked/i)
+    ).toContain("发布后不可修改")
+    expect(validatePublishedPatch(active, { questions: [] })).toContain("发布后不可修改")
+    expect(validatePublishedPatch(active, { codes: ["X"] })).toContain("发布后不可修改")
   })
 
   it("allows unchanged locked fields in a full active-campaign save", () => {

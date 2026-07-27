@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: Context) {
     .select("id,position,code,claimed_at,claimed_by_submission_id")
     .eq("campaign_id", params.id)
     .order("position")
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: "福利码加载失败" }, { status: 500 })
   return NextResponse.json(data ?? [])
 }
 
@@ -26,7 +26,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
   if (!activity) return NextResponse.json({ error }, { status: 404 })
   if (activity.status !== "draft") {
     return NextResponse.json(
-      { error: "Reward codes are locked after publish" },
+      { error: "福利码发布后不可修改" },
       { status: 409 }
     )
   }
@@ -35,7 +35,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
   try {
     body = await req.json()
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+    return NextResponse.json({ error: "请求数据格式无效" }, { status: 400 })
   }
   let codes: string[]
   try {
@@ -44,11 +44,11 @@ export async function PUT(req: NextRequest, { params }: Context) {
     } else if (Array.isArray(body.codes)) {
       codes = parseRewardCodes(body.codes.map(String).join("\n"))
     } else {
-      throw new ActivityValidationError("codes or raw is required")
+      throw new ActivityValidationError("请输入福利码")
     }
   } catch (validationError) {
     const message =
-      validationError instanceof Error ? validationError.message : "Invalid codes"
+      validationError instanceof Error ? validationError.message : "福利码格式无效"
     return NextResponse.json({ error: message }, { status: 400 })
   }
 
@@ -62,7 +62,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
   if (replaceError) {
     const locked = replaceError.message.includes("activity_locked")
     return NextResponse.json(
-      { error: locked ? "Reward codes are locked after publish" : replaceError.message },
+      { error: locked ? "福利码发布后不可修改" : "福利码保存失败" },
       { status: locked ? 409 : 500 }
     )
   }

@@ -14,7 +14,7 @@ export async function POST(req: NextRequest, { params }: Context) {
   if (!activity) return NextResponse.json({ error }, { status: 404 })
   if (activity.status !== "active" && activity.status !== "closed") {
     return NextResponse.json(
-      { error: "Only active activities can be closed" },
+      { error: "只有进行中的活动可以关闭" },
       { status: 409 }
     )
   }
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, { params }: Context) {
       .select()
       .single()
     if (closeError) {
-      return NextResponse.json({ error: closeError.message }, { status: 500 })
+      return NextResponse.json({ error: "活动关闭失败" }, { status: 500 })
     }
   }
 
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, { params }: Context) {
     return NextResponse.json({
       ok: true,
       discord_updated: false,
-      warning: "Activity closed, but Discord message could not be updated",
+      warning: "活动已关闭，但缺少 Discord 消息配置，按钮未能更新",
     })
   }
   try {
@@ -56,14 +56,14 @@ export async function POST(req: NextRequest, { params }: Context) {
       return NextResponse.json({
         ok: true,
         discord_updated: false,
-        warning: "Activity closed, but Discord message update failed",
+        warning: "活动已关闭，但 Discord 消息更新失败",
       })
     }
   } catch {
     return NextResponse.json({
       ok: true,
       discord_updated: false,
-      warning: "Activity closed, but Discord API was unreachable",
+      warning: "活动已关闭，但暂时无法连接 Discord",
     })
   }
   return NextResponse.json({ ok: true, discord_updated: true })

@@ -27,7 +27,7 @@ export function ActivityCodePool({ campaign }: { campaign: ActivityCampaign }) {
         return response.json() as Promise<CodeRow[]>
       })
       .then((rows) => setRaw(rows.map((row) => row.code).join("\n")))
-      .catch(() => setMessage("Failed to load reward codes"))
+      .catch(() => setMessage("福利码加载失败"))
       .finally(() => setLoading(false))
   }, [campaign.id])
 
@@ -48,9 +48,9 @@ export function ActivityCodePool({ campaign }: { campaign: ActivityCampaign }) {
         body: JSON.stringify({ codes }),
       })
       const data = await response.json()
-      setMessage(response.ok ? `Imported ${data.count} codes` : data.error)
+      setMessage(response.ok ? `已导入 ${data.count} 个福利码` : data.error)
     } catch {
-      setMessage("Network error")
+      setMessage("网络错误")
     } finally {
       setSaving(false)
     }
@@ -65,13 +65,13 @@ export function ActivityCodePool({ campaign }: { campaign: ActivityCampaign }) {
         </div>
         {!locked && (
           <Button size="sm" onClick={save} disabled={saving || loading}>
-            <Save className="h-3.5 w-3.5" /> Import Codes
+            <Save className="h-3.5 w-3.5" /> 导入福利码
           </Button>
         )}
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="reward-codes">Reward Codes</Label>
-        <Textarea id="reward-codes" aria-label="Reward Codes" rows={18} className="font-mono" value={raw} disabled={locked || loading} onChange={(event) => setRaw(event.target.value)} />
+        <Label htmlFor="reward-codes">福利码（每行一个，按顺序发放）</Label>
+        <Textarea id="reward-codes" aria-label="福利码" rows={18} className="font-mono" value={raw} disabled={locked || loading} onChange={(event) => setRaw(event.target.value)} />
       </div>
       {message && <p className="text-[12.5px] text-muted-foreground">{message}</p>}
     </div>

@@ -11,6 +11,13 @@ import { activityApiGuard, loadActivity } from "../../helpers"
 
 type Context = { params: { id: string } }
 
+const activationErrorMessages: Record<string, string> = {
+  invalid_code_count: "福利码数量与中奖人数不一致",
+  invalid_end_time: "活动结束时间无效或已过期",
+  invalid_questions: "活动问题配置无效",
+  stale_draft: "活动配置已发生变化，请刷新后重试",
+}
+
 async function deleteDiscordMessage(
   channelId: string,
   messageId: string,
@@ -36,7 +43,7 @@ export async function POST(req: NextRequest, { params }: Context) {
   const guildId = process.env.DISCORD_GUILD_ID
   if (!token || !guildId) {
     return NextResponse.json(
-      { error: "Discord Bot token or guild is not configured" },
+      { error: "Discord Bot Token 或服务器尚未配置" },
       { status: 503 }
     )
   }
@@ -44,14 +51,14 @@ export async function POST(req: NextRequest, { params }: Context) {
   const { activity, error } = await loadActivity(params.id)
   if (!activity) return NextResponse.json({ error }, { status: 404 })
   if (activity.status === "closed") {
-    return NextResponse.json({ error: "Activity is closed" }, { status: 409 })
+    return NextResponse.json({ error: "活动已结束，无法发布" }, { status: 409 })
   }
   if (!activity.discord_channel_id || !/^\d+$/.test(activity.discord_channel_id)) {
-    return NextResponse.json({ error: "Discord channel is required" }, { status: 400 })
+    return NextResponse.json({ error: "请选择 Discord 频道" }, { status: 400 })
   }
   if (!activity.embed_title && !activity.embed_description) {
     return NextResponse.json(
-      { error: "Embed title or description is required" },
+      { error: "消息标题和正文至少填写一项" },
       { status: 400 }
     )
   }
@@ -62,7 +69,7 @@ export async function POST(req: NextRequest, { params }: Context) {
   const endsAt = activity.ends_at ? Date.parse(activity.ends_at) : Number.NaN
   if (!Number.isFinite(endsAt) || endsAt <= Date.now()) {
     return NextResponse.json(
-      { error: "Activity end time must be in the future" },
+      { error: "活动结束时间必须晚于当前时间" },
       { status: 400 }
     )
   }
@@ -73,7 +80,7 @@ export async function POST(req: NextRequest, { params }: Context) {
     .eq("campaign_id", params.id)
     .order("position")
   if (codeError) {
-    return NextResponse.json({ error: codeError.message }, { status: 500 })
+    return NextResponse.json({ error: "福利码加载失败" }, { status: 500 })
   }
   try {
     parseRewardCodes(
@@ -102,17 +109,17 @@ export async function POST(req: NextRequest, { params }: Context) {
       body: JSON.stringify(buildActivityDiscordBody(activity)),
     })
   } catch {
-    return NextResponse.json({ error: "Discord API unreachable" }, { status: 502 })
+    return NextResponse.json({ error: "暂时无法连接 Discord，请稍后重试" }, { status: 502 })
   }
   if (!discordResponse.ok) {
-    return NextResponse.json({ error: "Discord API error" }, { status: 502 })
+    return NextResponse.json({ error: "Discord 发布失败，请检查频道权限" }, { status: 502 })
   }
   if (updating) return NextResponse.json({ ok: true, message_id: activity.discord_message_id })
 
   const discordMessage = await discordResponse.json() as { id?: string }
   if (!discordMessage.id) {
     return NextResponse.json(
-      { error: "Discord API returned an invalid message" },
+      { error: "Discord 返回的消息数据无效" },
       { status: 502 }
     )
   }
@@ -136,12 +143,12 @@ export async function POST(req: NextRequest, { params }: Context) {
       token
     )
     if (activationError) {
-      return NextResponse.json({ error: activationError.message }, { status: 500 })
+      return NextResponse.json({ error: "Discord 消息已发送，但活动启用失败" }, { status: 500 })
     }
     if (activation?.outcome === "already_active") {
       return NextResponse.json(
         {
-          error: "Activity was already published",
+          error: "活动已经发布，请勿重复操作",
           message_id: activation.existing_message_id,
         },
         { status: 409 }
@@ -154,7 +161,11 @@ export async function POST(req: NextRequest, { params }: Context) {
       "stale_draft",
     ].includes(activation?.outcome)
     return NextResponse.json(
-      { error: `Activity activation failed: ${activation?.outcome ?? "unknown"}` },
+      {
+        error:
+          activationErrorMessages[activation?.outcome] ??
+          "活动启用失败，请稍后重试",
+      },
       { status: invalidDraft ? 409 : 500 }
     )
   }

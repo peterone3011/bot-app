@@ -31,27 +31,27 @@ function optionalString(value: unknown, maxLength: number): boolean {
 }
 
 export function validateCampaignInput(input: unknown): string | null {
-  if (!isRecord(input)) return "Campaign body must be an object"
-  if (!nonEmptyString(input.name, 120)) return "Name is required (maximum 120 characters)"
+  if (!isRecord(input)) return "活动数据格式无效"
+  if (!nonEmptyString(input.name, 120)) return "请输入活动名称（最多 120 个字符）"
   if (
     typeof input.winner_limit !== "number" ||
     !Number.isInteger(input.winner_limit) ||
     input.winner_limit < 1 ||
     input.winner_limit > 10000
   ) {
-    return "Winner limit must be an integer between 1 and 10000"
+    return "中奖人数必须是 1–10000 之间的整数"
   }
   if (!nonEmptyString(input.button_label, 80)) {
-    return "Button label is required (maximum 80 characters)"
+    return "请输入按钮文字（最多 80 个字符）"
   }
   if (!nonEmptyString(input.modal_title, 45)) {
-    return "Modal title is required (maximum 45 characters)"
+    return "请输入弹窗标题（最多 45 个字符）"
   }
   if (!optionalString(input.embed_title, 256)) {
-    return "Embed title must be at most 256 characters"
+    return "消息标题最多 256 个字符"
   }
   if (!optionalString(input.embed_description, 4000)) {
-    return "Embed description must be at most 4000 characters"
+    return "消息正文最多 4000 个字符"
   }
   if (
     input.color !== null &&
@@ -63,7 +63,7 @@ export function validateCampaignInput(input: unknown): string | null {
       input.color > 0xffffff
     )
   ) {
-    return "Color must be an integer between 0 and 16777215"
+    return "消息颜色值无效"
   }
   if (
     input.image_url !== null &&
@@ -74,7 +74,7 @@ export function validateCampaignInput(input: unknown): string | null {
       !/^https?:\/\/\S+$/i.test(input.image_url)
     )
   ) {
-    return "Image URL must start with http:// or https://"
+    return "图片 URL 必须以 http:// 或 https:// 开头"
   }
   for (const field of ["discord_guild_id", "discord_channel_id"]) {
     const value = input[field]
@@ -84,16 +84,21 @@ export function validateCampaignInput(input: unknown): string | null {
       value !== "" &&
       (typeof value !== "string" || !/^\d+$/.test(value))
     ) {
-      return `${field} must be a numeric Discord snowflake`
+      return `${field === "discord_channel_id" ? "Discord 频道 ID" : "Discord 服务器 ID"}必须为数字`
     }
+  }
+  const replyLabels: Record<string, string> = {
+    winner_message: "中奖回复",
+    sold_out_message: "福利码发完回复",
+    closed_message: "活动结束回复",
   }
   for (const field of ["winner_message", "sold_out_message", "closed_message"]) {
     if (!nonEmptyString(input[field], 4000)) {
-      return `${field} is required (maximum 4000 characters)`
+      return `${replyLabels[field]}不能为空（最多 4000 个字符）`
     }
   }
   if (!(input.winner_message as string).includes("{code}")) {
-    return "Winner message must include {code}"
+    return "中奖回复必须包含 {code}"
   }
   if (
     input.ends_at !== null &&
@@ -103,12 +108,12 @@ export function validateCampaignInput(input: unknown): string | null {
       !Number.isFinite(Date.parse(input.ends_at))
     )
   ) {
-    return "Activity end time is invalid"
+    return "活动结束时间无效"
   }
 
   const questions = input.questions
   if (!Array.isArray(questions) || questions.length < 1 || questions.length > 5) {
-    return "Campaign must contain 1-5 questions"
+    return "活动必须包含 1–5 个问题"
   }
 
   const fieldKeys = new Set<string>()
@@ -118,15 +123,15 @@ export function validateCampaignInput(input: unknown): string | null {
 
   for (let index = 0; index < questions.length; index += 1) {
     const rawQuestion = questions[index]
-    if (!isRecord(rawQuestion)) return `Question ${index + 1} must be an object`
+    if (!isRecord(rawQuestion)) return `第 ${index + 1} 个问题格式无效`
     const fieldKey = rawQuestion.field_key
     if (
       typeof fieldKey !== "string" ||
       !/^[a-z][a-z0-9_]{0,63}$/.test(fieldKey)
     ) {
-      return `Question ${index + 1} has an invalid field key`
+      return `第 ${index + 1} 个问题的字段标识无效`
     }
-    if (fieldKeys.has(fieldKey)) return "Question field keys must be unique"
+    if (fieldKeys.has(fieldKey)) return "每个问题的字段标识必须唯一"
     fieldKeys.add(fieldKey)
 
     const position = rawQuestion.position
@@ -137,18 +142,18 @@ export function validateCampaignInput(input: unknown): string | null {
       position > 5 ||
       positions.has(position)
     ) {
-      return "Question positions must be unique integers from 1 to 5"
+      return "问题排序必须是 1–5 之间且不能重复的整数"
     }
     positions.add(position)
 
     if (!nonEmptyString(rawQuestion.label, 45)) {
-      return `Question ${index + 1} label is required (maximum 45 characters)`
+      return `第 ${index + 1} 个问题的标题不能为空（最多 45 个字符）`
     }
     if (!["short", "paragraph"].includes(String(rawQuestion.input_style))) {
-      return `Question ${index + 1} input style is invalid`
+      return `第 ${index + 1} 个问题的输入框类型无效`
     }
     if (!optionalString(rawQuestion.placeholder, 100)) {
-      return `Question ${index + 1} placeholder is too long`
+      return `第 ${index + 1} 个问题的占位提示过长`
     }
     const minLength = rawQuestion.min_length
     const maxLength = rawQuestion.max_length
@@ -163,22 +168,22 @@ export function validateCampaignInput(input: unknown): string | null {
       maxLength > 4000 ||
       minLength > maxLength
     ) {
-      return `Question ${index + 1} length limits are invalid`
+      return `第 ${index + 1} 个问题的长度限制无效`
     }
     if (rawQuestion.prefill_discord_username === true) prefillCount += 1
     if (rawQuestion.is_participant_key === true) {
       participantKeyCount += 1
       if (rawQuestion.required !== true) {
-        return "The unique participant question must be required"
+        return "唯一参与者 ID 问题必须设为必填"
       }
     }
   }
 
   if (prefillCount > 1) {
-    return "Only one question may prefill the Discord username"
+    return "只能有一个问题自动填入 Discord 用户名"
   }
   if (participantKeyCount > 1) {
-    return "Only one unique participant question is allowed"
+    return "只能设置一个唯一参与者 ID 问题"
   }
   return null
 }
@@ -193,6 +198,16 @@ const LOCKED_AFTER_PUBLISH = [
   "codes",
 ] as const
 
+const lockedFieldLabels: Record<(typeof LOCKED_AFTER_PUBLISH)[number], string> = {
+  discord_guild_id: "Discord 服务器",
+  discord_channel_id: "Discord 频道",
+  winner_limit: "中奖人数",
+  ends_at: "活动结束时间",
+  modal_title: "弹窗标题",
+  questions: "玩家填写问题",
+  codes: "福利码",
+}
+
 export function validatePublishedPatch(
   campaign: ActivityCampaign,
   patch: Record<string, unknown>
@@ -202,11 +217,11 @@ export function validatePublishedPatch(
     const field = LOCKED_AFTER_PUBLISH[index]
     if (!(field in patch)) continue
     if (field === "codes") {
-      return `${field} is locked after publish`
+      return `${lockedFieldLabels[field]}发布后不可修改`
     }
     const current = campaign[field as keyof ActivityCampaign]
     if (JSON.stringify(current) !== JSON.stringify(patch[field])) {
-      return `${field} is locked after publish`
+      return `${lockedFieldLabels[field]}发布后不可修改`
     }
   }
   return null
@@ -218,14 +233,14 @@ export function parseRewardCodes(raw: string, expectedCount?: number): string[] 
     .map((code) => code.trim())
     .filter(Boolean)
   if (new Set(codes).size !== codes.length) {
-    throw new ActivityValidationError("Reward codes must not contain duplicates")
+    throw new ActivityValidationError("福利码不能重复")
   }
   if (codes.some((code) => code.length > 200)) {
-    throw new ActivityValidationError("Reward codes must be at most 200 characters")
+    throw new ActivityValidationError("每个福利码最多 200 个字符")
   }
   if (expectedCount !== undefined && codes.length !== expectedCount) {
     throw new ActivityValidationError(
-      `Publish requires exactly ${expectedCount} reward codes`
+      `发布前必须正好导入 ${expectedCount} 个福利码`
     )
   }
   return codes

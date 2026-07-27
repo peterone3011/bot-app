@@ -33,7 +33,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
   try {
     body = await req.json()
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+    return NextResponse.json({ error: "请求数据格式无效" }, { status: 400 })
   }
   const { activity, error } = await loadActivity(params.id)
   if (!activity) return NextResponse.json({ error }, { status: 404 })
@@ -75,7 +75,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
   if (updateError) {
     const locked = updateError.message.includes("activity_locked")
     return NextResponse.json(
-      { error: locked ? "Activity settings are locked after publish" : updateError.message },
+      { error: locked ? "活动发布后，这些设置不可修改" : "活动保存失败" },
       { status: locked ? 409 : 500 }
     )
   }
@@ -88,7 +88,7 @@ export async function PUT(req: NextRequest, { params }: Context) {
     const token = process.env.DISCORD_BOT_TOKEN
     if (!token) {
       return NextResponse.json(
-        { error: "Bot token not configured; database was updated" },
+        { error: "活动已保存，但 Discord Bot 尚未配置，公开消息未更新" },
         { status: 503 }
       )
     }
@@ -108,13 +108,13 @@ export async function PUT(req: NextRequest, { params }: Context) {
       )
     } catch {
       return NextResponse.json(
-        { error: "Discord API unreachable; database was updated" },
+        { error: "活动已保存，但暂时无法连接 Discord，公开消息未更新" },
         { status: 502 }
       )
     }
     if (!discordResponse.ok) {
       return NextResponse.json(
-        { error: "Discord message update failed; database was updated" },
+        { error: "活动已保存，但 Discord 公开消息更新失败" },
         { status: 502 }
       )
     }
@@ -134,7 +134,7 @@ export async function DELETE(req: NextRequest, { params }: Context) {
   if (!activity) return NextResponse.json({ error }, { status: 404 })
   if (activity.status !== "draft") {
     return NextResponse.json(
-      { error: "Only draft activities can be deleted" },
+      { error: "只能删除草稿状态的活动" },
       { status: 409 }
     )
   }
@@ -145,11 +145,11 @@ export async function DELETE(req: NextRequest, { params }: Context) {
     .eq("status", "draft")
     .select("id")
   if (deleteError) {
-    return NextResponse.json({ error: deleteError.message }, { status: 500 })
+    return NextResponse.json({ error: "活动删除失败" }, { status: 500 })
   }
   if (!Array.isArray(deleted) || deleted.length === 0) {
     return NextResponse.json(
-      { error: "Activity is no longer a draft" },
+      { error: "活动已不再是草稿，无法删除" },
       { status: 409 }
     )
   }

@@ -29,15 +29,15 @@ export default async function ActivityPage({ params }: { params: { id: string } 
     <div className="space-y-6">
       <div>
         <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
-          <span>Activity Management</span><span className="text-muted-foreground/40">/</span><span className="truncate text-foreground">{campaign.name}</span>
+          <span>活动管理</span><span className="text-muted-foreground/40">/</span><span className="truncate text-foreground">{campaign.name}</span>
         </div>
         <h1 className="mt-1.5 text-[22px] font-semibold">{campaign.name}</h1>
       </div>
       <Tabs defaultValue="settings">
         <TabsList>
-          <TabsTrigger value="settings"><Settings className="h-3.5 w-3.5" /> Settings</TabsTrigger>
-          <TabsTrigger value="codes"><KeyRound className="h-3.5 w-3.5" /> Reward Codes</TabsTrigger>
-          <TabsTrigger value="submissions"><ClipboardList className="h-3.5 w-3.5" /> Submissions</TabsTrigger>
+          <TabsTrigger value="settings"><Settings className="h-3.5 w-3.5" /> 活动设置</TabsTrigger>
+          <TabsTrigger value="codes"><KeyRound className="h-3.5 w-3.5" /> 福利码</TabsTrigger>
+          <TabsTrigger value="submissions"><ClipboardList className="h-3.5 w-3.5" /> 提交记录</TabsTrigger>
         </TabsList>
         <TabsContent value="settings"><ActivityEditor initial={campaign} /></TabsContent>
         <TabsContent value="codes"><ActivityCodePool campaign={campaign} /></TabsContent>

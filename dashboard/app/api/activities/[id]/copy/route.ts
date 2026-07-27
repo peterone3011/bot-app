@@ -20,7 +20,7 @@ export async function POST(req: NextRequest, { params }: Context) {
   const id = crypto.randomUUID()
   const fields = campaignFields({
     ...activity,
-    name: `${activity.name} Copy`,
+    name: `${activity.name} 副本`,
   })
   const { data, error: insertError } = await supabase
     .from("activity_campaigns")
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, { params }: Context) {
     .select()
     .single()
   if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 })
+    return NextResponse.json({ error: "活动复制失败" }, { status: 500 })
   }
   const { data: copiedQuestions, error: questionError } = await supabase
     .from("activity_questions")
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest, { params }: Context) {
     .select()
   if (questionError) {
     await supabase.from("activity_campaigns").delete().eq("id", id)
-    return NextResponse.json({ error: questionError.message }, { status: 500 })
+    return NextResponse.json({ error: "活动问题复制失败" }, { status: 500 })
   }
   return NextResponse.json({ ...data, questions: copiedQuestions ?? [] }, { status: 201 })
 }

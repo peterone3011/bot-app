@@ -10,6 +10,12 @@ import { Input } from "@/components/ui/input"
 import type { ActivityCampaign } from "@/lib/types"
 
 
+const statusLabels: Record<ActivityCampaign["status"], string> = {
+  draft: "草稿",
+  active: "进行中",
+  closed: "已结束",
+}
+
 export function ActivityList({ campaigns }: { campaigns: ActivityCampaign[] }) {
   const router = useRouter()
   const [name, setName] = useState("")
@@ -18,7 +24,7 @@ export function ActivityList({ campaigns }: { campaigns: ActivityCampaign[] }) {
 
   async function create() {
     if (!name.trim()) {
-      setError("Activity name is required")
+      setError("请输入活动名称")
       return
     }
     setBusy(true)
@@ -61,13 +67,13 @@ export function ActivityList({ campaigns }: { campaigns: ActivityCampaign[] }) {
       })
       const data = await response.json()
       if (!response.ok) {
-        setError(data.error ?? "Create failed")
+        setError(data.error ?? "创建失败")
         return
       }
       router.push(`/dashboard/activities/${data.id}`)
       router.refresh()
     } catch {
-      setError("Network error")
+      setError("网络错误")
     } finally {
       setBusy(false)
     }
@@ -76,14 +82,14 @@ export function ActivityList({ campaigns }: { campaigns: ActivityCampaign[] }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap gap-2 border-b border-border pb-5">
-        <Input className="max-w-sm" value={name} onChange={(event) => setName(event.target.value)} placeholder="Activity name" />
-        <Button onClick={create} disabled={busy}><Plus className="h-3.5 w-3.5" /> Create Draft</Button>
+        <Input className="max-w-sm" value={name} onChange={(event) => setName(event.target.value)} placeholder="输入活动名称" />
+        <Button onClick={create} disabled={busy}><Plus className="h-3.5 w-3.5" /> 创建草稿</Button>
         {error && <span className="self-center text-[12px] text-destructive">{error}</span>}
       </div>
       {campaigns.length === 0 ? (
         <div className="rounded-md border border-dashed border-border py-16 text-center text-muted-foreground">
           <ClipboardList className="mx-auto mb-3 h-5 w-5" />
-          <p className="text-sm">No activities</p>
+          <p className="text-sm">暂无活动</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -92,9 +98,9 @@ export function ActivityList({ campaigns }: { campaigns: ActivityCampaign[] }) {
               <span className="h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: `#${(campaign.color ?? 0xff9933).toString(16).padStart(6, "0")}` }} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{campaign.name}</p>
-                <p className="mt-1 font-mono text-[11px] text-muted-foreground">{campaign.code_count ?? 0} codes · {campaign.submission_count ?? 0} submissions</p>
+                <p className="mt-1 font-mono text-[11px] text-muted-foreground">{campaign.code_count ?? 0} 个福利码 · {campaign.submission_count ?? 0} 条提交</p>
               </div>
-              <span className="fp-pill fp-pill-muted capitalize">{campaign.status}</span>
+              <span className="fp-pill fp-pill-muted">{statusLabels[campaign.status]}</span>
               <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
             </Link>
           ))}

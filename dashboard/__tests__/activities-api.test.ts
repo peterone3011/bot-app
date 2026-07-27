@@ -145,6 +145,9 @@ describe("activity APIs", () => {
     )
 
     expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      error: "只能删除草稿状态的活动",
+    })
     expect(mocks.from).toHaveBeenCalledTimes(1)
   })
 
@@ -209,6 +212,9 @@ describe("activity APIs", () => {
     )
 
     expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      error: "活动结束时间必须晚于当前时间",
+    })
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 
@@ -283,6 +289,9 @@ describe("activity APIs", () => {
     )
 
     expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      error: "活动配置已发生变化，请刷新后重试",
+    })
     expect(mocks.rpc).toHaveBeenCalledWith(
       "activate_activity_campaign",
       expect.objectContaining({ p_expected_revision: 7 })
@@ -330,6 +339,21 @@ describe("activity APIs", () => {
       p_campaign_id: "c1",
       p_codes: ["A", "B"],
     })
+  })
+
+  it("returns a Chinese error when reward codes cannot be loaded", async () => {
+    mocks.from.mockReturnValueOnce(
+      query({ data: null, error: { message: "database unavailable" } })
+    )
+    const { GET } = await import("@/app/api/activities/[id]/codes/route")
+
+    const response = await GET(
+      request("/api/activities/c1/codes") as any,
+      { params: { id: "c1" } }
+    )
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: "福利码加载失败" })
   })
 
   it("closes in the database before disabling the Discord button", async () => {
@@ -440,5 +464,24 @@ describe("activity APIs", () => {
     expect(
       Array.from(new Uint8Array(await response.arrayBuffer()).slice(0, 3))
     ).toEqual([0xef, 0xbb, 0xbf])
+  })
+
+  it("returns a Chinese error when CSV questions cannot be loaded", async () => {
+    mocks.from.mockReturnValueOnce(
+      query({ data: null, error: { message: "database unavailable" } })
+    )
+    const { GET } = await import(
+      "@/app/api/activities/[id]/submissions/export/route"
+    )
+
+    const response = await GET(
+      request("/api/activities/c1/submissions/export") as any,
+      { params: { id: "c1" } }
+    )
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({
+      error: "问题配置加载失败，无法导出",
+    })
   })
 })

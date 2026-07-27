@@ -22,9 +22,9 @@ export default async function ActivitiesPage() {
     <div className="space-y-6">
       <div>
         <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
-          <span>Workspace</span><span className="text-muted-foreground/40">/</span><span className="text-foreground">Activity Management</span>
+          <span>工作台</span><span className="text-muted-foreground/40">/</span><span className="text-foreground">活动管理</span>
         </div>
-        <h1 className="mt-1.5 text-[22px] font-semibold">Activity Management</h1>
+        <h1 className="mt-1.5 text-[22px] font-semibold">活动管理</h1>
       </div>
       <ActivityList campaigns={campaigns} />
     </div>

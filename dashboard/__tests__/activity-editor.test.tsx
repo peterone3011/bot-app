@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/channel-select", () => ({
   ChannelSelect: ({ value, disabled }: { value: string; disabled?: boolean }) => (
-    <input aria-label="Discord Channel" value={value} disabled={disabled} readOnly />
+    <input aria-label="Discord 频道" value={value} disabled={disabled} readOnly />
   ),
 }))
 
@@ -73,9 +73,9 @@ describe("ActivityEditor", () => {
     vi.stubGlobal("fetch", fetchMock)
     render(<ActivityEditor initial={campaign} />)
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Question" }))
-    expect(screen.getAllByLabelText("Question Label")).toHaveLength(2)
-    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    fireEvent.click(screen.getByRole("button", { name: "添加问题" }))
+    expect(screen.getAllByLabelText("问题标题")).toHaveLength(2)
+    fireEvent.click(screen.getByRole("button", { name: "保存" }))
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -88,12 +88,12 @@ describe("ActivityEditor", () => {
   it("locks channel, end time, winner limit, modal title and questions after publish", () => {
     render(<ActivityEditor initial={{ ...campaign, status: "active" }} />)
 
-    expect(screen.getByLabelText("Discord Channel")).toBeDisabled()
-    expect(screen.getByLabelText("Activity End Time")).toBeDisabled()
-    expect(screen.getByLabelText("Winner Limit")).toBeDisabled()
-    expect(screen.getByLabelText("Modal Title")).toBeDisabled()
-    expect(screen.queryByRole("button", { name: "Add Question" })).toBeNull()
-    expect(screen.getByLabelText("Embed Title")).not.toBeDisabled()
+    expect(screen.getByLabelText("Discord 频道")).toBeDisabled()
+    expect(screen.getByLabelText("活动结束时间")).toBeDisabled()
+    expect(screen.getByLabelText("中奖人数")).toBeDisabled()
+    expect(screen.getByLabelText("弹窗标题")).toBeDisabled()
+    expect(screen.queryByRole("button", { name: "添加问题" })).toBeNull()
+    expect(screen.getByLabelText("消息标题")).not.toBeDisabled()
   })
 
   it("shows a warning when closing succeeds but Discord cannot be updated", async () => {
@@ -105,19 +105,19 @@ describe("ActivityEditor", () => {
         json: async () => ({
           ok: true,
           discord_updated: false,
-          warning: "Activity closed, but Discord message update failed",
+          warning: "活动已关闭，但 Discord 消息更新失败",
         }),
       })
     )
     render(<ActivityEditor initial={{ ...campaign, status: "active" }} />)
 
-    fireEvent.click(screen.getByRole("button", { name: "Close" }))
+    fireEvent.click(screen.getByRole("button", { name: "关闭活动" }))
 
     expect(
-      await screen.findByText("Activity closed, but Discord message update failed")
+      await screen.findByText("活动已关闭，但 Discord 消息更新失败")
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "Retry Discord Update" })
+      screen.getByRole("button", { name: "重试更新 Discord" })
     ).toBeInTheDocument()
   })
 
@@ -131,7 +131,7 @@ describe("ActivityEditor", () => {
     render(<ActivityEditor initial={{ ...campaign, status: "closed" }} />)
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Retry Discord Update" })
+      screen.getByRole("button", { name: "重试更新 Discord" })
     )
 
     await waitFor(() =>
@@ -145,9 +145,9 @@ describe("ActivityEditor", () => {
   it("does not offer editing or save controls for a closed activity", () => {
     render(<ActivityEditor initial={{ ...campaign, status: "closed" }} />)
 
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull()
-    expect(screen.getByLabelText("Embed Title")).toBeDisabled()
-    expect(screen.getByLabelText("Winner Reply")).toBeDisabled()
+    expect(screen.queryByRole("button", { name: "保存" })).toBeNull()
+    expect(screen.getByLabelText("消息标题")).toBeDisabled()
+    expect(screen.getByLabelText("中奖回复")).toBeDisabled()
   })
 
   it("recovers after a network error while deleting a draft", async () => {
@@ -155,11 +155,23 @@ describe("ActivityEditor", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")))
     render(<ActivityEditor initial={campaign} />)
 
-    const deleteButton = screen.getByRole("button", { name: "Delete" })
+    const deleteButton = screen.getByRole("button", { name: "删除草稿" })
     fireEvent.click(deleteButton)
 
-    expect(await screen.findByText("Network error")).toBeInTheDocument()
+    expect(await screen.findByText("网络错误")).toBeInTheDocument()
     expect(deleteButton).not.toBeDisabled()
+  })
+
+  it("uses Chinese management labels while preserving player-facing English", () => {
+    render(<ActivityEditor initial={campaign} />)
+
+    expect(screen.getByText("Discord 消息")).toBeInTheDocument()
+    expect(screen.getByText("玩家填写问题")).toBeInTheDocument()
+    expect(screen.getByText("仅玩家可见回复")).toBeInTheDocument()
+    expect(screen.getByDisplayValue("Join Activity")).toBeInTheDocument()
+    expect(screen.getByDisplayValue("Survey")).toBeInTheDocument()
+    expect(screen.getByDisplayValue("Winner **{code}**")).toBeInTheDocument()
+    expect(screen.queryByText("Discord Message")).toBeNull()
   })
 })
 
@@ -178,10 +190,10 @@ describe("ActivityCodePool", () => {
     vi.stubGlobal("fetch", fetchMock)
     render(<ActivityCodePool campaign={campaign} />)
 
-    const textarea = await screen.findByLabelText("Reward Codes")
+    const textarea = await screen.findByLabelText("福利码")
     fireEvent.change(textarea, { target: { value: "CODE-1\nCODE-2" } })
     expect(screen.getByText("2 / 20")).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: "Import Codes" }))
+    fireEvent.click(screen.getByRole("button", { name: "导入福利码" }))
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenLastCalledWith(
@@ -201,7 +213,7 @@ describe("ActivityCodePool", () => {
     )
     render(<ActivityCodePool campaign={{ ...campaign, status: "active" }} />)
 
-    expect(await screen.findByLabelText("Reward Codes")).toBeDisabled()
-    expect(screen.queryByRole("button", { name: "Import Codes" })).toBeNull()
+    expect(await screen.findByLabelText("福利码")).toBeDisabled()
+    expect(screen.queryByRole("button", { name: "导入福利码" })).toBeNull()
   })
 })

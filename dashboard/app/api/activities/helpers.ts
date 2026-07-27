@@ -17,7 +17,7 @@ export async function activityApiGuard(
   if (limited) return limited
   const session = await auth()
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return NextResponse.json({ error: "未登录或登录已过期" }, { status: 401 })
   }
   return null
 }
@@ -33,7 +33,7 @@ export async function loadActivity(
   if (error || !data) {
     return {
       activity: null,
-      error: error?.message ?? "Activity not found",
+      error: "活动不存在或读取失败",
     }
   }
   const raw = data as unknown as ActivityCampaign & {
@@ -129,7 +129,7 @@ export async function loadSubmissions(id: string): Promise<{
     )
     .eq("campaign_id", id)
     .order("submitted_at", { ascending: false })
-  if (error) return { submissions: [], error: error.message }
+  if (error) return { submissions: [], error: "提交记录加载失败" }
   return {
     submissions: ((data ?? []) as Record<string, unknown>[]).map(mapSubmission),
     error: null,

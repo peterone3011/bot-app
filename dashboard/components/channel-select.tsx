@@ -39,7 +39,7 @@ export function ChannelSelect({ value, onChange, disabled }: ChannelSelectProps)
         setLoading(false)
       })
       .catch(() => {
-        setError("无法加载频道列表,请检查 Bot Token 配置")
+        setError("无法加载频道列表，请检查 Discord Bot 配置")
         setLoading(false)
       })
   }, [])
@@ -48,7 +48,7 @@ export function ChannelSelect({ value, onChange, disabled }: ChannelSelectProps)
     return (
       <div className="h-9 rounded-md border border-input bg-secondary/40 animate-pulse flex items-center gap-2 px-3">
         <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-pulse" />
-        <span className="text-[12.5px] text-muted-foreground/60">加载频道列表中…</span>
+        <span className="text-[12.5px] text-muted-foreground/60">正在加载频道列表…</span>
       </div>
     )
   }
@@ -74,8 +74,8 @@ export function ChannelSelect({ value, onChange, disabled }: ChannelSelectProps)
 
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger>
-        <SelectValue placeholder="选择频道…" />
+      <SelectTrigger aria-label="Discord 频道">
+        <SelectValue placeholder="选择 Discord 频道" />
       </SelectTrigger>
       <SelectContent>
         {ungrouped.map((c) => (

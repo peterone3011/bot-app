@@ -21,7 +21,10 @@ export async function GET(req: NextRequest, { params }: Context) {
     .eq("campaign_id", params.id)
     .order("position")
   if (questionError) {
-    return NextResponse.json({ error: questionError.message }, { status: 500 })
+    return NextResponse.json(
+      { error: "问题配置加载失败，无法导出" },
+      { status: 500 }
+    )
   }
   const { submissions, error } = await loadSubmissions(params.id)
   if (error) return NextResponse.json({ error }, { status: 500 })
