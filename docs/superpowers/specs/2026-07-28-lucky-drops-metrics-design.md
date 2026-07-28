@@ -48,4 +48,3 @@ Tests will cover:
 - The expanded daily and weekly sheet ranges.
 - Weekly Lucky Drops member totals.
 - Preservation of existing metric ordering.
-
