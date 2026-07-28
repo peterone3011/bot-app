@@ -136,4 +136,64 @@ describe("ActivityList", () => {
 
     expect(screen.getByText("\u5df2\u7ed3\u675f")).toBeInTheDocument()
   })
+
+  it("reschedules a capped timeout until a far-future campaign expires", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-28T12:00:00.000Z"))
+    const endsAtMs = Date.parse("2026-08-28T12:00:00.000Z")
+
+    render(
+      <ActivityList
+        renderedAtMs={Date.now()}
+        campaigns={[
+          {
+            id: "far-future-campaign",
+            name: "Far Future Campaign",
+            status: "active",
+            ends_at: new Date(endsAtMs).toISOString(),
+            color: 0xff9933,
+          } as any,
+        ]}
+      />
+    )
+
+    expect(screen.getByText("\u8fdb\u884c\u4e2d")).toBeInTheDocument()
+    expect(vi.getTimerCount()).toBe(1)
+
+    act(() => vi.advanceTimersByTime(2_147_483_647))
+
+    expect(screen.getByText("\u8fdb\u884c\u4e2d")).toBeInTheDocument()
+    expect(vi.getTimerCount()).toBe(1)
+
+    act(() => vi.advanceTimersByTime(endsAtMs - Date.now()))
+
+    expect(screen.getByText("\u5df2\u7ed3\u675f")).toBeInTheDocument()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it("clears the expiry timeout when the activity list unmounts", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-28T12:00:00.000Z"))
+
+    const { unmount } = render(
+      <ActivityList
+        renderedAtMs={Date.now()}
+        campaigns={[
+          {
+            id: "unmounted-campaign",
+            name: "Unmounted Campaign",
+            status: "active",
+            ends_at: "2026-07-28T12:00:01.000Z",
+            color: 0xff9933,
+          } as any,
+        ]}
+      />
+    )
+
+    expect(vi.getTimerCount()).toBe(1)
+
+    unmount()
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
 })
