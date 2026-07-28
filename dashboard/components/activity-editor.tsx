@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   Copy,
@@ -18,14 +18,19 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { validateCampaignInput } from "@/lib/activities"
-import type { ActivityCampaign, ActivityQuestion } from "@/lib/types"
+import { getActivityDisplayStatus, validateCampaignInput } from "@/lib/activities"
+import type {
+  ActivityCampaign,
+  ActivityDisplayStatus,
+  ActivityQuestion,
+} from "@/lib/types"
 
 
-const statusLabels: Record<ActivityCampaign["status"], string> = {
+const statusLabels: Record<ActivityDisplayStatus, string> = {
   draft: "草稿",
   active: "进行中",
-  closed: "已结束",
+  expired: "已结束",
+  closed: "已关闭",
 }
 
 function newQuestion(position: number, campaignId: string): ActivityQuestion {
@@ -64,6 +69,12 @@ export function ActivityEditor({ initial }: { initial: ActivityCampaign }) {
   const [message, setMessage] = useState("")
   const locked = campaign.status !== "draft"
   const closed = campaign.status === "closed"
+  const displayStatus = getActivityDisplayStatus(campaign)
+
+  useEffect(() => {
+    setCampaign(initial)
+    setMessage("")
+  }, [initial])
 
   function update<K extends keyof ActivityCampaign>(
     field: K,
@@ -191,7 +202,7 @@ export function ActivityEditor({ initial }: { initial: ActivityCampaign }) {
     <div className="space-y-7">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div className="flex items-center gap-2">
-          <span className="fp-pill fp-pill-muted">{statusLabels[campaign.status]}</span>
+          <span className="fp-pill fp-pill-muted">{statusLabels[displayStatus]}</span>
           {message && <span className="text-[12px] text-muted-foreground">{message}</span>}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -215,7 +226,7 @@ export function ActivityEditor({ initial }: { initial: ActivityCampaign }) {
           )}
           {campaign.status === "active" && (
             <Button variant="destructive" size="sm" onClick={() => action("close", "确定关闭此活动吗？关闭后玩家将无法继续提交。")} disabled={busy}>
-              <Square className="h-3.5 w-3.5" /> 关闭活动
+              <Square className="h-3.5 w-3.5" /> {displayStatus === "expired" ? "禁用 Discord 按钮" : "关闭活动"}
             </Button>
           )}
           {closed && (

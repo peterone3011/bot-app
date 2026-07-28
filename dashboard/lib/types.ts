@@ -25,6 +25,7 @@ export interface Role {
 }
 
 export type ActivityStatus = "draft" | "active" | "closed"
+export type ActivityDisplayStatus = ActivityStatus | "expired"
 export type ActivityInputStyle = "short" | "paragraph"
 export type ActivitySubmissionOutcome = "winner" | "sold_out"
 

@@ -39,7 +39,7 @@ export default async function ActivityPage({ params }: { params: { id: string } 
           <TabsTrigger value="codes"><KeyRound className="h-3.5 w-3.5" /> 福利码</TabsTrigger>
           <TabsTrigger value="submissions"><ClipboardList className="h-3.5 w-3.5" /> 提交记录</TabsTrigger>
         </TabsList>
-        <TabsContent value="settings"><ActivityEditor initial={campaign} /></TabsContent>
+        <TabsContent value="settings"><ActivityEditor key={`${campaign.id}:${campaign.revision ?? campaign.updated_at}`} initial={campaign} /></TabsContent>
         <TabsContent value="codes"><ActivityCodePool campaign={campaign} /></TabsContent>
         <TabsContent value="submissions"><ActivitySubmissions campaignId={campaign.id} questions={campaign.questions} /></TabsContent>
       </Tabs>

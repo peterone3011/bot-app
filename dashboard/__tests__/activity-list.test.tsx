@@ -68,4 +68,26 @@ describe("ActivityList", () => {
     expect(screen.getByText("20 个福利码 · 8 条提交")).toBeInTheDocument()
     expect(screen.getByText("English Campaign Name")).toBeInTheDocument()
   })
+
+  it("shows an elapsed active campaign as expired and links directly to its detail page", () => {
+    render(
+      <ActivityList
+        campaigns={[
+          {
+            id: "expired-campaign",
+            name: "Expired Campaign",
+            status: "active",
+            ends_at: "2020-01-01T00:00:00.000Z",
+            color: 0xff9933,
+          } as any,
+        ]}
+      />
+    )
+
+    expect(screen.getByText("\u5df2\u7ed3\u675f")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /Expired Campaign/ })).toHaveAttribute(
+      "href",
+      "/dashboard/activities/expired-campaign"
+    )
+  })
 })

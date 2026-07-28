@@ -173,6 +173,55 @@ describe("ActivityEditor", () => {
     expect(screen.getByDisplayValue("Winner **{code}**")).toBeInTheDocument()
     expect(screen.queryByText("Discord Message")).toBeNull()
   })
+
+  it("replaces local state when refreshed server props identify a different campaign", () => {
+    const { rerender } = render(
+      <ActivityEditor
+        initial={{
+          ...campaign,
+          id: "copy",
+          name: "Old Copy",
+          status: "draft",
+          revision: 1,
+          updated_at: "2026-07-28T01:00:00Z",
+        }}
+      />
+    )
+
+    rerender(
+      <ActivityEditor
+        initial={{
+          ...campaign,
+          id: "active",
+          name: "Current Activity",
+          status: "active",
+          revision: 5,
+          updated_at: "2026-07-28T02:00:00Z",
+        }}
+      />
+    )
+
+    expect(screen.getByDisplayValue("Current Activity")).toBeInTheDocument()
+    expect(screen.queryByDisplayValue("Old Copy")).toBeNull()
+    expect(screen.getByText("\u8fdb\u884c\u4e2d")).toBeInTheDocument()
+  })
+
+  it("shows an elapsed active campaign as expired and offers to disable its Discord button", () => {
+    render(
+      <ActivityEditor
+        initial={{
+          ...campaign,
+          status: "active",
+          ends_at: "2020-01-01T00:00:00.000Z",
+        }}
+      />
+    )
+
+    expect(screen.getByText("\u5df2\u7ed3\u675f")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "\u7981\u7528 Discord \u6309\u94ae" })
+    ).toBeInTheDocument()
+  })
 })
 
 

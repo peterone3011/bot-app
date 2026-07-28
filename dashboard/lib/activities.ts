@@ -1,5 +1,6 @@
 import type {
   ActivityCampaign,
+  ActivityDisplayStatus,
   ActivityQuestion,
   ActivitySubmission,
   ActivitySubmissionOutcome,
@@ -28,6 +29,16 @@ function nonEmptyString(value: unknown, maxLength: number): boolean {
 function optionalString(value: unknown, maxLength: number): boolean {
   return value === null || value === undefined ||
     (typeof value === "string" && value.length <= maxLength)
+}
+
+export function getActivityDisplayStatus(
+  campaign: Pick<ActivityCampaign, "status" | "ends_at">,
+  nowMs = Date.now()
+): ActivityDisplayStatus {
+  if (campaign.status !== "active") return campaign.status
+  if (!campaign.ends_at) return "active"
+  const endsAt = Date.parse(campaign.ends_at)
+  return Number.isFinite(endsAt) && endsAt <= nowMs ? "expired" : "active"
 }
 
 export function validateCampaignInput(input: unknown): string | null {

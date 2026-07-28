@@ -4,6 +4,7 @@ import {
   ActivityValidationError,
   buildActivityDiscordBody,
   filterActivitySubmissions,
+  getActivityDisplayStatus,
   parseRewardCodes,
   toActivityCsv,
   validateCampaignInput,
@@ -162,6 +163,49 @@ describe("validateCampaignInput", () => {
     expect(
       validateCampaignInput({ ...campaign, ends_at: "not-a-date" })
     ).toContain("结束时间")
+  })
+})
+
+describe("activity display status", () => {
+  const now = Date.parse("2026-07-28T12:00:00.000Z")
+
+  it("keeps a future active campaign running", () => {
+    expect(
+      getActivityDisplayStatus(
+        {
+          status: "active",
+          ends_at: "2026-07-28T12:00:01.000Z",
+        },
+        now
+      )
+    ).toBe("active")
+  })
+
+  it("shows an elapsed active campaign as expired", () => {
+    expect(
+      getActivityDisplayStatus(
+        {
+          status: "active",
+          ends_at: "2026-07-28T12:00:00.000Z",
+        },
+        now
+      )
+    ).toBe("expired")
+  })
+
+  it("preserves explicit draft and closed states", () => {
+    expect(
+      getActivityDisplayStatus(
+        { status: "draft", ends_at: "2020-01-01T00:00:00.000Z" },
+        now
+      )
+    ).toBe("draft")
+    expect(
+      getActivityDisplayStatus(
+        { status: "closed", ends_at: "2099-01-01T00:00:00.000Z" },
+        now
+      )
+    ).toBe("closed")
   })
 })
 
