@@ -125,7 +125,7 @@ export async function loadSubmissions(id: string): Promise<{
   const { data, error } = await supabase
     .from("activity_submissions")
     .select(
-      "id,campaign_id,discord_user_id,discord_username,answers,participant_key_normalized,outcome,submitted_at,reward_code:activity_codes(code)"
+      "id,campaign_id,discord_user_id,discord_username,answers,participant_key_normalized,outcome,submitted_at,reward_code:activity_codes!activity_submissions_campaign_reward_code_fkey(code)"
     )
     .eq("campaign_id", id)
     .order("submitted_at", { ascending: false })

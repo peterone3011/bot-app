@@ -466,6 +466,30 @@ describe("activity APIs", () => {
     ).toEqual([0xef, 0xbb, 0xbf])
   })
 
+  it("uses the reward-code foreign key when loading submissions", async () => {
+    const submissionQuery = query({ data: [], error: null })
+    mocks.from.mockReturnValueOnce(submissionQuery)
+    const { GET } = await import(
+      "@/app/api/activities/[id]/submissions/route"
+    )
+    const req = request("/api/activities/c1/submissions") as any
+    Object.defineProperty(req, "nextUrl", {
+      value: new URL("https://dashboard.test/api/activities/c1/submissions"),
+    })
+
+    const response = await GET(
+      req,
+      { params: { id: "c1" } }
+    )
+
+    expect(response.status).toBe(200)
+    expect(submissionQuery.select).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "activity_codes!activity_submissions_campaign_reward_code_fkey"
+      )
+    )
+  })
+
   it("returns a Chinese error when CSV questions cannot be loaded", async () => {
     mocks.from.mockReturnValueOnce(
       query({ data: null, error: { message: "database unavailable" } })
