@@ -161,6 +161,26 @@ def test_write_weekly_includes_current_lucky_drops_member_count(monkeypatch):
     )
 
 
+def test_write_weekly_uses_zero_when_lucky_drops_role_is_missing(monkeypatch):
+    roles = [
+        type("Role", (), {"name": "Gaming Alerts", "members": [1, 2]})(),
+        type("Role", (), {"name": "Exclusive Updates", "members": [1, 2, 3]})(),
+    ]
+    guild = type("Guild", (), {"member_count": 540, "members": [], "roles": roles})()
+    cog = _rollup_cog(
+        monkeypatch,
+        guild,
+        [{"type": "join", "ts": "2026-07-28T01:00:00+08:00"}],
+    )
+
+    asyncio.run(cog._write_weekly(datetime.date(2026, 8, 2)))
+
+    assert cog.sheet.writes[-1] == (
+        f"{cm.METRICS_SHEET_ID}!I2:Q2",
+        [["2026/08/02", 540, 1, 0, 1, 0, 2, 3, 0]],
+    )
+
+
 class _FakeReaction:
     def __init__(self, users):
         self._users = users

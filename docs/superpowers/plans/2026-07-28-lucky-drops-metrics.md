@@ -191,4 +191,3 @@ After deployment, set the Lark headers:
 
 - H1: `Lucky Drops 今日新增订阅人数`
 - Q1: `Lucky Drops 当前总订阅人数`
-
