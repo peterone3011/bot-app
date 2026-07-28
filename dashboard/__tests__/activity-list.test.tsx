@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { ActivityList } from "@/components/activity-list"
+import { ActivityList as ActivityListComponent } from "@/components/activity-list"
+import type { ActivityCampaign } from "@/lib/types"
 
 
 const push = vi.fn()
@@ -12,8 +13,25 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, refresh: vi.fn() }),
 }))
 
+vi.mock("next/link", () => ({
+  default: ({ children, href }: { children: React.ReactNode; href: string }) => (
+    <a data-testid="next-link-prefetch" href={href}>{children}</a>
+  ),
+}))
+
+function ActivityList({
+  campaigns,
+  renderedAtMs = Date.now(),
+}: {
+  campaigns: ActivityCampaign[]
+  renderedAtMs?: number
+}) {
+  return <ActivityListComponent campaigns={campaigns} renderedAtMs={renderedAtMs} />
+}
+
 describe("ActivityList", () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
@@ -69,7 +87,7 @@ describe("ActivityList", () => {
     expect(screen.getByText("English Campaign Name")).toBeInTheDocument()
   })
 
-  it("shows an elapsed active campaign as expired and links directly to its detail page", () => {
+  it("shows an elapsed active campaign as expired with a native detail anchor", () => {
     render(
       <ActivityList
         campaigns={[
@@ -89,5 +107,33 @@ describe("ActivityList", () => {
       "href",
       "/dashboard/activities/expired-campaign"
     )
+    expect(screen.queryByTestId("next-link-prefetch")).toBeNull()
+  })
+
+  it("changes an open list item to expired when its end time passes", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-28T12:00:00.000Z"))
+    const renderedAtMs = Date.now()
+
+    render(
+      <ActivityList
+        renderedAtMs={renderedAtMs}
+        campaigns={[
+          {
+            id: "expiring-campaign",
+            name: "Expiring Campaign",
+            status: "active",
+            ends_at: "2026-07-28T12:00:01.000Z",
+            color: 0xff9933,
+          } as any,
+        ]}
+      />
+    )
+
+    expect(screen.getByText("\u8fdb\u884c\u4e2d")).toBeInTheDocument()
+
+    act(() => vi.advanceTimersByTime(1000))
+
+    expect(screen.getByText("\u5df2\u7ed3\u675f")).toBeInTheDocument()
   })
 })

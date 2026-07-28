@@ -6,6 +6,7 @@ import type { ActivityCampaign } from "@/lib/types"
 export const dynamic = "force-dynamic"
 
 export default async function ActivitiesPage() {
+  const renderedAtMs = Date.now()
   const { data } = await supabase
     .from("activity_campaigns")
     .select("*, activity_questions(*), activity_codes(count), activity_submissions(count)")
@@ -26,7 +27,7 @@ export default async function ActivitiesPage() {
         </div>
         <h1 className="mt-1.5 text-[22px] font-semibold">活动管理</h1>
       </div>
-      <ActivityList campaigns={campaigns} />
+      <ActivityList campaigns={campaigns} renderedAtMs={renderedAtMs} />
     </div>
   )
 }

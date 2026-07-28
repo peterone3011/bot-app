@@ -18,7 +18,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { getActivityDisplayStatus, validateCampaignInput } from "@/lib/activities"
+import { useActivityDisplayStatus } from "@/hooks/use-activity-display-status"
+import { validateCampaignInput } from "@/lib/activities"
 import type {
   ActivityCampaign,
   ActivityDisplayStatus,
@@ -62,14 +63,20 @@ function fromBeijingInputValue(value: string): string | null {
   return new Date(`${value}:00+08:00`).toISOString()
 }
 
-export function ActivityEditor({ initial }: { initial: ActivityCampaign }) {
+export function ActivityEditor({
+  initial,
+  renderedAtMs,
+}: {
+  initial: ActivityCampaign
+  renderedAtMs: number
+}) {
   const router = useRouter()
   const [campaign, setCampaign] = useState(initial)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
   const locked = campaign.status !== "draft"
   const closed = campaign.status === "closed"
-  const displayStatus = getActivityDisplayStatus(campaign)
+  const displayStatus = useActivityDisplayStatus(campaign, renderedAtMs)
 
   useEffect(() => {
     setCampaign(initial)

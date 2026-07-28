@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { ActivityEditor } from "@/components/activity-editor"
+import { ActivityEditor as ActivityEditorComponent } from "@/components/activity-editor"
 import { ActivityCodePool } from "@/components/activity-code-pool"
 import type { ActivityCampaign } from "@/lib/types"
 
@@ -17,6 +17,16 @@ vi.mock("@/components/channel-select", () => ({
     <input aria-label="Discord 频道" value={value} disabled={disabled} readOnly />
   ),
 }))
+
+function ActivityEditor({
+  initial,
+  renderedAtMs = Date.now(),
+}: {
+  initial: ActivityCampaign
+  renderedAtMs?: number
+}) {
+  return <ActivityEditorComponent initial={initial} renderedAtMs={renderedAtMs} />
+}
 
 const campaign: ActivityCampaign = {
   id: "c1",
@@ -61,6 +71,7 @@ const campaign: ActivityCampaign = {
 
 describe("ActivityEditor", () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
@@ -163,7 +174,7 @@ describe("ActivityEditor", () => {
   })
 
   it("uses Chinese management labels while preserving player-facing English", () => {
-    render(<ActivityEditor initial={campaign} />)
+    render(<ActivityEditor initial={campaign} renderedAtMs={Date.now()} />)
 
     expect(screen.getByText("Discord 消息")).toBeInTheDocument()
     expect(screen.getByText("玩家填写问题")).toBeInTheDocument()
@@ -174,13 +185,12 @@ describe("ActivityEditor", () => {
     expect(screen.queryByText("Discord Message")).toBeNull()
   })
 
-  it("replaces local state when refreshed server props identify a different campaign", () => {
+  it("replaces local state when refreshed server props revise the same campaign", () => {
     const { rerender } = render(
       <ActivityEditor
         initial={{
           ...campaign,
-          id: "copy",
-          name: "Old Copy",
+          name: "Original Activity",
           status: "draft",
           revision: 1,
           updated_at: "2026-07-28T01:00:00Z",
@@ -192,8 +202,7 @@ describe("ActivityEditor", () => {
       <ActivityEditor
         initial={{
           ...campaign,
-          id: "active",
-          name: "Current Activity",
+          name: "Refreshed Activity",
           status: "active",
           revision: 5,
           updated_at: "2026-07-28T02:00:00Z",
@@ -201,8 +210,8 @@ describe("ActivityEditor", () => {
       />
     )
 
-    expect(screen.getByDisplayValue("Current Activity")).toBeInTheDocument()
-    expect(screen.queryByDisplayValue("Old Copy")).toBeNull()
+    expect(screen.getByDisplayValue("Refreshed Activity")).toBeInTheDocument()
+    expect(screen.queryByDisplayValue("Original Activity")).toBeNull()
     expect(screen.getByText("\u8fdb\u884c\u4e2d")).toBeInTheDocument()
   })
 
@@ -222,11 +231,35 @@ describe("ActivityEditor", () => {
       screen.getByRole("button", { name: "\u7981\u7528 Discord \u6309\u94ae" })
     ).toBeInTheDocument()
   })
+
+  it("changes an open detail editor to expired when its end time passes", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-07-28T12:00:00.000Z"))
+    const renderedAtMs = Date.now()
+
+    render(
+      <ActivityEditor
+        initial={{
+          ...campaign,
+          status: "active",
+          ends_at: "2026-07-28T12:00:01.000Z",
+        }}
+        renderedAtMs={renderedAtMs}
+      />
+    )
+
+    expect(screen.getByText("\u8fdb\u884c\u4e2d")).toBeInTheDocument()
+
+    act(() => vi.advanceTimersByTime(1000))
+
+    expect(screen.getByText("\u5df2\u7ed3\u675f")).toBeInTheDocument()
+  })
 })
 
 
 describe("ActivityCodePool", () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
   })

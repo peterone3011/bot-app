@@ -6,7 +6,7 @@ import { ChevronRight, ClipboardList, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { getActivityDisplayStatus } from "@/lib/activities"
+import { useActivityDisplayStatus } from "@/hooks/use-activity-display-status"
 import type { ActivityCampaign, ActivityDisplayStatus } from "@/lib/types"
 
 
@@ -17,7 +17,35 @@ const statusLabels: Record<ActivityDisplayStatus, string> = {
   closed: "已关闭",
 }
 
-export function ActivityList({ campaigns }: { campaigns: ActivityCampaign[] }) {
+function ActivityListItem({
+  campaign,
+  renderedAtMs,
+}: {
+  campaign: ActivityCampaign
+  renderedAtMs: number
+}) {
+  const displayStatus = useActivityDisplayStatus(campaign, renderedAtMs)
+
+  return (
+    <a href={`/dashboard/activities/${campaign.id}`} className="group flex items-center gap-4 rounded-md border border-border bg-card px-4 py-3.5 hover:bg-card/80">
+      <span className="h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: `#${(campaign.color ?? 0xff9933).toString(16).padStart(6, "0")}` }} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{campaign.name}</p>
+        <p className="mt-1 font-mono text-[11px] text-muted-foreground">{campaign.code_count ?? 0} 个福利码 · {campaign.submission_count ?? 0} 条提交</p>
+      </div>
+      <span className="fp-pill fp-pill-muted">{statusLabels[displayStatus]}</span>
+      <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+    </a>
+  )
+}
+
+export function ActivityList({
+  campaigns,
+  renderedAtMs,
+}: {
+  campaigns: ActivityCampaign[]
+  renderedAtMs: number
+}) {
   const router = useRouter()
   const [name, setName] = useState("")
   const [busy, setBusy] = useState(false)
@@ -94,20 +122,13 @@ export function ActivityList({ campaigns }: { campaigns: ActivityCampaign[] }) {
         </div>
       ) : (
         <div className="space-y-2">
-          {campaigns.map((campaign) => {
-            const displayStatus = getActivityDisplayStatus(campaign)
-            return (
-            <a key={campaign.id} href={`/dashboard/activities/${campaign.id}`} className="group flex items-center gap-4 rounded-md border border-border bg-card px-4 py-3.5 hover:bg-card/80">
-              <span className="h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: `#${(campaign.color ?? 0xff9933).toString(16).padStart(6, "0")}` }} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{campaign.name}</p>
-                <p className="mt-1 font-mono text-[11px] text-muted-foreground">{campaign.code_count ?? 0} 个福利码 · {campaign.submission_count ?? 0} 条提交</p>
-              </div>
-              <span className="fp-pill fp-pill-muted">{statusLabels[displayStatus]}</span>
-              <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-            </a>
-            )
-          })}
+          {campaigns.map((campaign) => (
+            <ActivityListItem
+              key={campaign.id}
+              campaign={campaign}
+              renderedAtMs={renderedAtMs}
+            />
+          ))}
         </div>
       )}
     </div>

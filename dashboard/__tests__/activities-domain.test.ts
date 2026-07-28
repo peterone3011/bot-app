@@ -193,6 +193,15 @@ describe("activity display status", () => {
     ).toBe("expired")
   })
 
+  it("keeps an active campaign running when its end time is missing or invalid", () => {
+    expect(
+      getActivityDisplayStatus({ status: "active", ends_at: null }, now)
+    ).toBe("active")
+    expect(
+      getActivityDisplayStatus({ status: "active", ends_at: "not-a-date" }, now)
+    ).toBe("active")
+  })
+
   it("preserves explicit draft and closed states", () => {
     expect(
       getActivityDisplayStatus(
