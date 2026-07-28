@@ -217,12 +217,12 @@ Replace activity detail `Link` entries with normal anchors:
 This intentionally performs a full document navigation and does not reuse a
 prefetched detail payload.
 
-Synchronize editor state when server props change:
+Synchronize campaign data when server props change without clearing an existing
+operation message or changing `busy`:
 
 ```ts
 useEffect(() => {
   setCampaign(initial)
-  setMessage("")
 }, [initial])
 ```
 
@@ -230,14 +230,17 @@ Key the editor in the server detail page:
 
 ```tsx
 <ActivityEditor
-  key={`${campaign.id}:${campaign.revision ?? campaign.updated_at}`}
+  key={campaign.id}
   initial={campaign}
 />
 ```
 
+This keeps same-campaign revision refreshes on the current editor instance, so
+an in-flight save/publish operation remains busy and a close warning remains
+visible. Navigating to another campaign ID still remounts the editor naturally.
 Keep existing immediate local updates and `router.refresh()` after mutations.
 The synchronized prop effect ensures refreshed server data replaces stale
-local state.
+local campaign data.
 
 - [x] **Step 7: Run focused tests**
 

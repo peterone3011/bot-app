@@ -80,7 +80,6 @@ export function ActivityEditor({
 
   useEffect(() => {
     setCampaign(initial)
-    setMessage("")
   }, [initial])
 
   function update<K extends keyof ActivityCampaign>(

@@ -56,10 +56,12 @@ and disables the public Discord button. This is optional.
 
 - Activity list entries use full document navigation instead of a prefetched
   client route, ensuring the detail page is read from the server.
-- `ActivityEditor` synchronizes its local campaign state whenever a new
-  `initial` campaign revision is received.
-- The detail page keys the editor by campaign ID and update timestamp so a
-  changed campaign cannot reuse another campaign's local editor state.
+- `ActivityEditor` synchronizes its local campaign data whenever refreshed
+  `initial` props arrive, without resetting in-flight operation state or an
+  existing operation warning/message.
+- The detail page keys the editor by campaign ID only. A same-campaign revision
+  refresh therefore preserves the editor instance, while navigating to a
+  different campaign still creates a fresh editor.
 - Successful publish and close actions reload the current detail document so
   the rendered page is verified against the database response.
 - Draft saving still updates local state before publishing and does not
@@ -82,8 +84,9 @@ Dashboard tests will cover:
 - Closed status taking precedence over expiry.
 - Expired labels in the activity list and detail editor.
 - The optional expired close action label.
-- Editor state replacement when refreshed props contain a different campaign
-  ID, revision, or update timestamp.
+- Same-ID revision refreshes synchronize campaign data without re-enabling an
+  in-flight operation or clearing a warning/message.
+- A different campaign ID creates a fresh editor instance.
 - Existing draft, active, publish, close, copy, and save behavior.
 
 Run Dashboard Vitest and Next.js production build before deployment.
