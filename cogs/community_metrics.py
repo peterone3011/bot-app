@@ -30,9 +30,16 @@ METRICS_SHEET_ID = os.getenv("COMMUNITY_METRICS_SHEET_ID", "e348a1")
 UPDATE_CHANNEL_ID = int(os.getenv("UPDATE_CHANNEL_ID", "0") or "0")
 GAMING_ROLE_NAME = os.getenv("METRICS_GAMING_ROLE_NAME", "Gaming Alerts")
 UPDATES_ROLE_NAME = os.getenv("METRICS_UPDATES_ROLE_NAME", "Exclusive Updates")
+LUCKY_DROPS_ROLE_NAME = os.getenv(
+    "METRICS_LUCKY_DROPS_ROLE_NAME",
+    "Lucky Drops",
+)
+DAILY_FIRST_COL = "A"
+DAILY_LAST_COL = "H"
+DAILY_RANGE_COLS = "A:H"
 WEEKLY_FIRST_COL = "I"
-WEEKLY_LAST_COL = "P"
-WEEKLY_RANGE_COLS = "I:P"
+WEEKLY_LAST_COL = "Q"
+WEEKLY_RANGE_COLS = "I:Q"
 
 EventType = Literal["join", "leave", "role_subscribe"]
 
@@ -255,6 +262,12 @@ class CommunityMetricsCog(commands.Cog):
         leaves = _count_events(events, "leave", start, end)
         gaming_subs = _count_unique_role_subscribers(events, start, end, GAMING_ROLE_NAME)
         updates_subs = _count_unique_role_subscribers(events, start, end, UPDATES_ROLE_NAME)
+        lucky_drops_subs = _count_unique_role_subscribers(
+            events,
+            start,
+            end,
+            LUCKY_DROPS_ROLE_NAME,
+        )
         total_members = guild.member_count or len([m for m in guild.members if not m.bot])
         sheet_date = _format_sheet_date(day)
 
@@ -266,10 +279,14 @@ class CommunityMetricsCog(commands.Cog):
             joins - leaves,
             gaming_subs,
             updates_subs,
+            lucky_drops_subs,
         ]
         try:
-            target = await self._find_or_next_row("A", sheet_date, "A:G")
-            await self.sheet.write_values(f"{METRICS_SHEET_ID}!A{target}:G{target}", [row])
+            target = await self._find_or_next_row(DAILY_FIRST_COL, sheet_date, DAILY_RANGE_COLS)
+            await self.sheet.write_values(
+                f"{METRICS_SHEET_ID}!{DAILY_FIRST_COL}{target}:{DAILY_LAST_COL}{target}",
+                [row],
+            )
             print(f"[community_metrics] Daily row updated for {sheet_date} at row {target}", flush=True)
         except Exception as exc:
             print(f"[community_metrics] Daily rollup failed: {exc}", flush=True)
@@ -287,6 +304,7 @@ class CommunityMetricsCog(commands.Cog):
         total_members = guild.member_count or len([m for m in guild.members if not m.bot])
         gaming_role = _find_role(guild, GAMING_ROLE_NAME)
         updates_role = _find_role(guild, UPDATES_ROLE_NAME)
+        lucky_drops_role = _find_role(guild, LUCKY_DROPS_ROLE_NAME)
         reaction_count = await self._count_weekly_update_reactions(start, end)
         sheet_date = _format_sheet_date(day)
 
@@ -299,6 +317,7 @@ class CommunityMetricsCog(commands.Cog):
             reaction_count,
             len(gaming_role.members) if gaming_role else 0,
             len(updates_role.members) if updates_role else 0,
+            len(lucky_drops_role.members) if lucky_drops_role else 0,
         ]
         try:
             target = await self._find_or_next_row(WEEKLY_FIRST_COL, sheet_date, WEEKLY_RANGE_COLS)
