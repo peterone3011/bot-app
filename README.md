@@ -39,7 +39,7 @@ tests/                 Python unit tests
 - **Big Win history**: Dashboard page `/dashboard/bigwin` reads the last 30 days of Redis-backed broadcast records.
 - **Jackpot**: `cogs/jackpot.py` posts at 19:00 Beijing time when `JACKPOT_ENABLED=1`.
 - **Updates**: `cogs/updates.py` checks Lark Bitable at Beijing midnight, publishes `待发布` records dated before today, retries read/image/send failures twice, and marks successful records `已发布`.
-- **Community metrics**: `cogs/community_metrics.py` records join/leave/role-subscribe events, then upserts daily metrics at 23:59 Beijing time and weekly metrics every Sunday at 23:59 Beijing time into the Lark Base table `FP-DC数据`.
+- **Community metrics**: `cogs/community_metrics.py` records join/leave/role-subscribe events, then upserts daily metrics at 23:59 Beijing time into the Lark Base table `FP-DC数据`.
 - **Screenshot activity**: `cogs/screenshot_activity.py` watches one configured Discord channel for image submissions, assigns the next available Lark Sheet code, DMs it to the player, and writes the claim record back to Lark.
 - **Autorole**: `cogs/autorole.py` backfills and assigns the configured member role until the 3000-user cap.
 

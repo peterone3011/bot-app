@@ -15,13 +15,6 @@ def test_day_window_uses_bjt_calendar_day():
     assert end.isoformat() == "2026-07-04T00:00:00+08:00"
 
 
-def test_week_window_starts_monday_and_covers_full_week():
-    sunday = datetime.date(2026, 7, 5)
-    start, end = cm._week_window(sunday)
-    assert start.isoformat() == "2026-06-29T00:00:00+08:00"
-    assert end.isoformat() == "2026-07-06T00:00:00+08:00"
-
-
 def test_rollup_time_is_2359_bjt():
     assert cm._ROLLUP_TIME_UTC.isoformat() == "15:59:00+00:00"
 
@@ -116,8 +109,11 @@ def _rollup_cog(monkeypatch, guild, events):
     monkeypatch.setattr(cm, "_load_events", lambda: asyncio.sleep(0, result=events))
     monkeypatch.setattr(cm, "_queue_pending_rollup", lambda *_: asyncio.sleep(0))
     monkeypatch.setattr(cm, "_remove_pending_rollup", lambda *_: asyncio.sleep(0))
-    cog._count_weekly_update_reactions = lambda start, end: asyncio.sleep(0, result=0)
     return cog
+
+
+def test_cog_has_no_weekly_rollup_task():
+    assert not hasattr(cm.CommunityMetricsCog, "weekly_rollup")
 
 
 def test_write_daily_includes_unique_lucky_drops_subscribers(monkeypatch):
@@ -135,7 +131,6 @@ def test_write_daily_includes_unique_lucky_drops_subscribers(monkeypatch):
         "日报 2026/07/28",
         {
             "记录": "日报 2026/07/28",
-            "统计类型": "日报",
             "日期": cm._base_date_ms(datetime.date(2026, 7, 28)),
             "当前总人数": 540,
             "新增人数": 1,
@@ -144,87 +139,8 @@ def test_write_daily_includes_unique_lucky_drops_subscribers(monkeypatch):
             "Gaming Alerts 新增订阅人数": 0,
             "Exclusive Updates 新增订阅人数": 0,
             "Lucky Drops 新增订阅人数": 1,
-            "本周贴文 Reaction 数": None,
-            "Gaming Alerts 总订阅人数": None,
-            "Exclusive Updates 总订阅人数": None,
-            "Lucky Drops 总订阅人数": None,
         },
     )
-
-
-def test_write_weekly_includes_current_lucky_drops_member_count(monkeypatch):
-    roles = [
-        type("Role", (), {"name": "Gaming Alerts", "members": [1, 2]})(),
-        type("Role", (), {"name": "Exclusive Updates", "members": [1, 2, 3]})(),
-        type("Role", (), {"name": "Lucky Drops", "members": [1, 2, 3, 4]})(),
-    ]
-    guild = type("Guild", (), {"member_count": 540, "members": [], "roles": roles})()
-    cog = _rollup_cog(
-        monkeypatch,
-        guild,
-        [{"type": "join", "ts": "2026-07-28T01:00:00+08:00"}],
-    )
-
-    asyncio.run(cog._write_weekly(datetime.date(2026, 8, 2)))
-
-    assert cog.base.upserts[-1] == (
-        "周报 2026/08/02",
-        {
-            "记录": "周报 2026/08/02",
-            "统计类型": "周报",
-            "日期": cm._base_date_ms(datetime.date(2026, 8, 2)),
-            "当前总人数": 540,
-            "新增人数": 1,
-            "离开人数": 0,
-            "净增长": 1,
-            "Gaming Alerts 新增订阅人数": None,
-            "Exclusive Updates 新增订阅人数": None,
-            "Lucky Drops 新增订阅人数": None,
-            "本周贴文 Reaction 数": 0,
-            "Gaming Alerts 总订阅人数": 2,
-            "Exclusive Updates 总订阅人数": 3,
-            "Lucky Drops 总订阅人数": 4,
-        },
-    )
-
-
-def test_write_weekly_uses_zero_when_lucky_drops_role_is_missing(monkeypatch):
-    roles = [
-        type("Role", (), {"name": "Gaming Alerts", "members": [1, 2]})(),
-        type("Role", (), {"name": "Exclusive Updates", "members": [1, 2, 3]})(),
-    ]
-    guild = type("Guild", (), {"member_count": 540, "members": [], "roles": roles})()
-    cog = _rollup_cog(
-        monkeypatch,
-        guild,
-        [{"type": "join", "ts": "2026-07-28T01:00:00+08:00"}],
-    )
-
-    asyncio.run(cog._write_weekly(datetime.date(2026, 8, 2)))
-
-    assert cog.base.upserts[-1][1]["Lucky Drops 总订阅人数"] == 0
-
-
-class _FakeReaction:
-    def __init__(self, users):
-        self._users = users
-
-    async def _iter_users(self):
-        for user in self._users:
-            yield user
-
-    def users(self, limit=None):
-        return self._iter_users()
-
-
-class _FakeUser:
-    def __init__(self, bot):
-        self.bot = bot
-
-
-def test_count_human_reaction_users_excludes_bots():
-    reaction = _FakeReaction([_FakeUser(bot=True), _FakeUser(bot=False), _FakeUser(bot=False)])
-    assert asyncio.run(cm._count_human_reaction_users(reaction)) == 2
 
 
 def test_base_client_paginates_and_updates_one_matching_record():
@@ -312,9 +228,9 @@ def test_base_client_creates_when_key_is_missing():
         return {"data": {}}
 
     client._request = fake_request
-    fields = {"记录": "周报 2026/08/09", "统计类型": "周报"}
+    fields = {"记录": "日报 2026/08/09", "新增人数": 3}
 
-    result = asyncio.run(client.upsert_record("周报 2026/08/09", fields))
+    result = asyncio.run(client.upsert_record("日报 2026/08/09", fields))
 
     assert result == "created"
     assert calls[-1] == (
@@ -322,7 +238,7 @@ def test_base_client_creates_when_key_is_missing():
         f"/bitable/v1/apps/{cm.METRICS_BASE_APP_TOKEN}/tables/"
         f"{cm.METRICS_BASE_TABLE_ID}/records",
         {
-            "params": {"client_token": cm._create_client_token("周报 2026/08/09")},
+            "params": {"client_token": cm._create_client_token("日报 2026/08/09")},
             "json": {"fields": fields},
         },
     )

@@ -8,7 +8,7 @@ import os
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterable, Literal, Optional
+from typing import Any, Iterable, Literal
 
 import aiohttp
 import discord
@@ -35,7 +35,6 @@ METRICS_BASE_TABLE_ID = os.getenv(
     "tblMeRm8yocZPqUR",
 )
 
-UPDATE_CHANNEL_ID = int(os.getenv("UPDATE_CHANNEL_ID", "0") or "0")
 GAMING_ROLE_NAME = os.getenv("METRICS_GAMING_ROLE_NAME", "Gaming Alerts")
 UPDATES_ROLE_NAME = os.getenv("METRICS_UPDATES_ROLE_NAME", "Exclusive Updates")
 LUCKY_DROPS_ROLE_NAME = os.getenv(
@@ -52,12 +51,6 @@ def _now_bjt() -> datetime.datetime:
 def _day_window(day: datetime.date) -> tuple[datetime.datetime, datetime.datetime]:
     start = datetime.datetime.combine(day, datetime.time.min, tzinfo=_BJT)
     return start, start + datetime.timedelta(days=1)
-
-
-def _week_window(day: datetime.date) -> tuple[datetime.datetime, datetime.datetime]:
-    monday = day - datetime.timedelta(days=day.weekday())
-    start = datetime.datetime.combine(monday, datetime.time.min, tzinfo=_BJT)
-    return start, start + datetime.timedelta(days=7)
 
 
 def _parse_ts(value: str) -> datetime.datetime | None:
@@ -104,11 +97,6 @@ def _count_unique_role_subscribers(
         if ts is not None and member_id and start <= ts < end:
             members.add(str(member_id))
     return len(members)
-
-
-def _find_role(guild: discord.Guild, name_part: str) -> Optional[discord.Role]:
-    needle = name_part.lower()
-    return next((role for role in guild.roles if needle in role.name.lower()), None)
 
 
 def _format_metric_date(day: datetime.date) -> str:
@@ -450,11 +438,9 @@ class CommunityMetricsCog(commands.Cog):
         self.base = LarkBaseClient()
         self._pending_replay_task = asyncio.create_task(self._replay_pending_after_ready())
         self.daily_rollup.start()
-        self.weekly_rollup.start()
 
     def cog_unload(self) -> None:
         self.daily_rollup.cancel()
-        self.weekly_rollup.cancel()
         self._pending_replay_task.cancel()
 
     async def _replay_pending_after_ready(self) -> None:
@@ -490,16 +476,6 @@ class CommunityMetricsCog(commands.Cog):
     async def before_daily_rollup(self) -> None:
         await self.bot.wait_until_ready()
 
-    @tasks.loop(time=[_ROLLUP_TIME_UTC])
-    async def weekly_rollup(self) -> None:
-        today = _now_bjt().date()
-        if today.weekday() == 6:  # Sunday
-            await self._write_weekly(today)
-
-    @weekly_rollup.before_loop
-    async def before_weekly_rollup(self) -> None:
-        await self.bot.wait_until_ready()
-
     async def _write_daily(self, day: datetime.date) -> None:
         await self._flush_pending_safely()
         guild = self.bot.guilds[0] if self.bot.guilds else None
@@ -524,7 +500,6 @@ class CommunityMetricsCog(commands.Cog):
         key = f"日报 {date_text}"
         fields: dict[str, object] = {
             "记录": key,
-            "统计类型": "日报",
             "日期": _base_date_ms(day),
             "当前总人数": total_members,
             "新增人数": joins,
@@ -533,10 +508,6 @@ class CommunityMetricsCog(commands.Cog):
             "Gaming Alerts 新增订阅人数": gaming_subs,
             "Exclusive Updates 新增订阅人数": updates_subs,
             "Lucky Drops 新增订阅人数": lucky_drops_subs,
-            "本周贴文 Reaction 数": None,
-            "Gaming Alerts 总订阅人数": None,
-            "Exclusive Updates 总订阅人数": None,
-            "Lucky Drops 总订阅人数": None,
         }
         try:
             action = await _persisted_upsert(self.base, key, fields)
@@ -559,90 +530,5 @@ class CommunityMetricsCog(commands.Cog):
                     flush=True,
                 )
 
-    async def _write_weekly(self, day: datetime.date) -> None:
-        await self._flush_pending_safely()
-        guild = self.bot.guilds[0] if self.bot.guilds else None
-        if guild is None:
-            print("[community_metrics] No guild available for weekly rollup", flush=True)
-            return
-
-        events = await _load_events()
-        start, end = _week_window(day)
-        joins = _count_events(events, "join", start, end)
-        leaves = _count_events(events, "leave", start, end)
-        total_members = guild.member_count or len([m for m in guild.members if not m.bot])
-        gaming_role = _find_role(guild, GAMING_ROLE_NAME)
-        updates_role = _find_role(guild, UPDATES_ROLE_NAME)
-        lucky_drops_role = _find_role(guild, LUCKY_DROPS_ROLE_NAME)
-        reaction_count = await self._count_weekly_update_reactions(start, end)
-        date_text = _format_metric_date(day)
-        key = f"周报 {date_text}"
-        fields: dict[str, object] = {
-            "记录": key,
-            "统计类型": "周报",
-            "日期": _base_date_ms(day),
-            "当前总人数": total_members,
-            "新增人数": joins,
-            "离开人数": leaves,
-            "净增长": joins - leaves,
-            "Gaming Alerts 新增订阅人数": None,
-            "Exclusive Updates 新增订阅人数": None,
-            "Lucky Drops 新增订阅人数": None,
-            "本周贴文 Reaction 数": reaction_count,
-            "Gaming Alerts 总订阅人数": len(gaming_role.members) if gaming_role else 0,
-            "Exclusive Updates 总订阅人数": len(updates_role.members) if updates_role else 0,
-            "Lucky Drops 总订阅人数": len(lucky_drops_role.members) if lucky_drops_role else 0,
-        }
-        try:
-            action = await _persisted_upsert(self.base, key, fields)
-            print(
-                f"[community_metrics] Weekly Base record {action} for {date_text}",
-                flush=True,
-            )
-        except Exception as exc:
-            try:
-                await _queue_pending_rollup(key, fields)
-            except Exception as queue_exc:
-                print(
-                    f"[community_metrics] Weekly rollup failed and could not be queued: "
-                    f"{exc}; queue error: {queue_exc}",
-                    flush=True,
-                )
-            else:
-                print(
-                    f"[community_metrics] Weekly rollup queued after Base failure: {exc}",
-                    flush=True,
-                )
-
-    async def _count_weekly_update_reactions(
-        self,
-        start: datetime.datetime,
-        end: datetime.datetime,
-    ) -> int:
-        if not UPDATE_CHANNEL_ID:
-            return 0
-        channel = self.bot.get_channel(UPDATE_CHANNEL_ID)
-        if not isinstance(channel, discord.abc.Messageable):
-            return 0
-        total = 0
-        after = start.astimezone(_UTC).replace(tzinfo=None)
-        before = end.astimezone(_UTC).replace(tzinfo=None)
-        try:
-            async for message in channel.history(limit=None, after=after, before=before):
-                for reaction in message.reactions:
-                    total += await _count_human_reaction_users(reaction)
-        except Exception as exc:
-            print(f"[community_metrics] Failed to count update reactions: {exc}", flush=True)
-        return total
-
-
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(CommunityMetricsCog(bot))
-
-
-async def _count_human_reaction_users(reaction: discord.Reaction) -> int:
-    count = 0
-    async for user in reaction.users(limit=None):
-        if not user.bot:
-            count += 1
-    return count
