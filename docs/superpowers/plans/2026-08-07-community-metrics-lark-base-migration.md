@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build and run an idempotent migration that creates the approved `FP-DC数据` Base schema and copies all 43 historical daily and weekly community metric records without changing the production Bot writer.
+**Goal:** Build and run an idempotent migration that creates the approved `FP-DC数据` Base schema and copies every historical daily and weekly community metric record present at execution time without changing the production Bot writer.
 
 **Architecture:** A one-time Python migration script owns Lark authentication, source Sheet reads, Base schema setup, record normalization, idempotent upsert, and verification. Pure transformation helpers are covered by focused tests; the live run starts in dry-run mode and only writes after the source count and normalized records pass validation.
 
@@ -12,7 +12,8 @@
 
 - Keep spreadsheet `PA8usyjmshX40HtXaeTjkr4Apne`, sheet `e348a1` unchanged.
 - Target only Base `CeqtbxWt5azkkHs8OzpjZ9D1p2e`, table `tblMeRm8yocZPqUR` (`FP-DC数据`).
-- Migrate exactly 38 daily and 5 weekly records.
+- Require the validated baseline of 38 daily and 5 weekly records, while including newer source rows.
+- Do not create, rename, or modify Base views in this stage.
 - Convert `/` and empty source cells to absent Base fields, not zero.
 - Do not modify `cogs/community_metrics.py` or deploy/restart the Bot in this stage.
 - Delete only target records whose fields are all empty.
@@ -32,7 +33,7 @@
 
 - [ ] **Step 1: Write failing transformation tests**
 
-Cover serial dates `46187 -> 2026-06-14`, slash-to-empty conversion, daily and weekly mappings, separate daily/weekly records on the same date, negative growth preservation, and validation requiring exactly 38 daily plus 5 weekly records.
+Cover serial dates `46187 -> 2026-06-14`, slash-to-empty conversion, daily and weekly mappings, separate daily/weekly records on the same date, negative growth preservation, a minimum baseline of 38 daily plus 5 weekly records, and acceptance of newer rows.
 
 - [ ] **Step 2: Run the focused tests and verify failure**
 
@@ -79,7 +80,7 @@ Expected: all migration mapping tests pass.
 
 - [ ] **Step 1: Write failing client orchestration tests**
 
-Use a fake client to prove dry-run performs no writes, missing fields and views are created only in apply mode, blank placeholders are the only deleted records, existing records are updated by primary key, missing records are created, and the final remote records exactly match the normalized source.
+Use a fake client to prove dry-run performs no writes, missing fields are created only in apply mode, views are never modified, blank placeholders are the only deleted records, existing records are updated by primary key, missing records are created, and the final remote records exactly match the normalized source.
 
 - [ ] **Step 2: Run focused tests and verify failure**
 
@@ -95,11 +96,11 @@ The script must:
 2. Read `e348a1!A1:Q200` from the source Sheet.
 3. Rename the existing primary field `文本` to `记录`.
 4. Create missing Base fields with text (`1`), number (`2`), single-select (`3`), and date (`5`) field types.
-5. Create missing grid views `每日数据` and `每周数据`; retain the current grid view and rename it `全部数据` when supported.
+5. Leave all Base views unchanged.
 6. Delete only records with an empty `fields` object or only empty values.
 7. Upsert records by the `记录` primary field.
-8. Re-read all records, reject duplicate primary keys, and compare every expected populated field.
-9. Print a report containing source daily/weekly counts, created/updated/deleted counts, and verification result without printing credentials.
+8. Re-read all records, reject duplicate primary keys, normalize Lark numeric strings, and compare every expected populated field.
+9. Print dynamically calculated source daily/weekly counts, created/updated/deleted counts, and verification result without printing credentials.
 
 - [ ] **Step 4: Run focused tests and the full Python suite**
 
@@ -118,25 +119,25 @@ Expected: the existing suite remains green.
 
 **Interfaces:**
 - Consumes: `scripts/migrate_community_metrics_to_base.py`
-- Produces: verified `FP-DC数据` Base schema and 43 migrated records.
+- Produces: verified `FP-DC数据` Base schema and all source records present at execution time.
 
 - [ ] **Step 1: Run a live dry-run**
 
 Run: `python scripts/migrate_community_metrics_to_base.py`
 
-Expected report: `daily=38`, `weekly=5`, `total=43`, and `apply=False`; no Base writes occur.
+Expected report: dynamic daily/weekly counts and `apply=False`; no Base writes occur.
 
 - [ ] **Step 2: Apply the migration once**
 
 Run: `python scripts/migrate_community_metrics_to_base.py --apply`
 
-Expected: fields and views are created, five blank records are removed, and 43 normalized records are present.
+Expected: fields are created, views remain unchanged, five blank records are removed, and all normalized source records are present.
 
 - [ ] **Step 3: Re-run dry-run to prove idempotency**
 
 Run: `python scripts/migrate_community_metrics_to_base.py`
 
-Expected: remote verification passes with 43 records and no pending creates, updates, or deletes.
+Expected: remote verification passes with the same record count as the source and no pending creates, updates, or deletes.
 
 - [ ] **Step 4: Spot-check critical records**
 

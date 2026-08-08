@@ -48,17 +48,15 @@ existing record when found. This keeps reruns idempotent.
 
 ## Views
 
-- `全部数据`: all records and fields
-- `每日数据`: daily records, showing common and daily fields
-- `每周数据`: weekly records, showing common and weekly fields
-
-If the Lark API cannot configure view filters or field visibility reliably, the
-views will still be created and the remaining presentation settings can be
-applied in the Lark UI without affecting the data model or migration.
+View creation and configuration are deferred. This migration must not create,
+rename, or otherwise modify any Base views. Views can be added after the data
+migration has been reviewed without affecting the data model or records.
 
 ## Migration Rules
 
-- Migrate 38 non-empty daily rows and 5 non-empty weekly rows, for 43 records.
+- Migrate every non-empty daily and weekly row present at execution time. The
+  validated baseline is 38 daily rows and 5 weekly rows; newer rollups are
+  included rather than rejected.
 - Convert Lark/Excel serial dates to `YYYY/MM/DD` before writing date values.
 - Convert `/` and empty source cells to empty Base fields, not zero.
 - Keep negative growth values unchanged.
@@ -68,9 +66,9 @@ applied in the Lark UI without affecting the data model or migration.
 
 ## Verification
 
-- Target record count is exactly 43 after migration.
+- Target record count exactly matches the normalized non-empty source rows.
 - There are no duplicate `(统计类型, 日期)` pairs.
-- There are 38 daily and 5 weekly records.
+- There are at least 38 daily and 5 weekly records, including newer source rows.
 - Spot-check source-to-target values for `2026/07/03`, `2026/08/02`, and
   `2026/08/06`.
 - Re-read the complete Base table after writing and compare every migrated field
