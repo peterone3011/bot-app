@@ -12,7 +12,7 @@ cogs/
   bigwin.py            Random 6-14h Big Win trigger through Dashboard API
   jackpot.py           Daily Jackpot broadcast, gated by JACKPOT_ENABLED
   updates.py           Lark Bitable -> Discord midnight updates publisher
-  community_metrics.py Daily/weekly Discord community metrics -> Lark Sheet
+  community_metrics.py Daily/weekly Discord community metrics -> Lark Base
   screenshot_activity.py Screenshot proof reward codes -> Lark Sheet
   autorole.py          Auto-assign member role up to 3000 users
   db.py                Supabase helper used by Bot cogs
@@ -39,7 +39,7 @@ tests/                 Python unit tests
 - **Big Win history**: Dashboard page `/dashboard/bigwin` reads the last 30 days of Redis-backed broadcast records.
 - **Jackpot**: `cogs/jackpot.py` posts at 19:00 Beijing time when `JACKPOT_ENABLED=1`.
 - **Updates**: `cogs/updates.py` checks Lark Bitable at Beijing midnight, publishes `待发布` records dated before today, retries read/image/send failures twice, and marks successful records `已发布`.
-- **Community metrics**: `cogs/community_metrics.py` records join/leave/role-subscribe events, then writes daily metrics at 23:59 Beijing time and weekly metrics every Sunday at 23:59 Beijing time to the Lark sheet `FB 社群总表`.
+- **Community metrics**: `cogs/community_metrics.py` records join/leave/role-subscribe events, then upserts daily metrics at 23:59 Beijing time and weekly metrics every Sunday at 23:59 Beijing time into the Lark Base table `FP-DC数据`.
 - **Screenshot activity**: `cogs/screenshot_activity.py` watches one configured Discord channel for image submissions, assigns the next available Lark Sheet code, DMs it to the player, and writes the claim record back to Lark.
 - **Autorole**: `cogs/autorole.py` backfills and assigns the configured member role until the 3000-user cap.
 
@@ -59,17 +59,17 @@ Common Bot variables:
 | `UPDATE_CHANNEL_ID` / `STAFF_CHAT_CHANNEL_ID` | Updates channel and staff alerts |
 | `LARK_APP_ID` / `LARK_APP_SECRET` / `LARK_NOTIFY_CHAT_ID` | Lark Bitable and alert access |
 | `BITABLE_APP_TOKEN` / `BITABLE_TABLE_ID` | Updates Bitable source |
-| `COMMUNITY_METRICS_SPREADSHEET_TOKEN` / `COMMUNITY_METRICS_SHEET_ID` | Optional override for the community metrics sheet |
+| `COMMUNITY_METRICS_BASE_APP_TOKEN` / `COMMUNITY_METRICS_BASE_TABLE_ID` | Optional override for the community metrics Base target |
 | `METRICS_GAMING_ROLE_NAME` / `METRICS_UPDATES_ROLE_NAME` | Optional role-name matching override for metrics |
 | `SCREENSHOT_ACTIVITY_CHANNEL_ID` | Discord channel where players submit screenshot proofs |
 | `SCREENSHOT_CODES_SPREADSHEET_TOKEN` / `SCREENSHOT_CODES_SHEET_ID` | Lark Sheet that stores screenshot activity reward codes |
 | `SCREENSHOT_CODES_RANGE` | Optional code sheet read range, defaults to `A:I` |
 
-Default community metrics target:
+Default community metrics Base target:
 
 ```text
-spreadsheet: PA8usyjmshX40HtXaeTjkr4Apne
-sheet: e348a1
+app: CeqtbxWt5azkkHs8OzpjZ9D1p2e
+table: tblMeRm8yocZPqUR
 ```
 
 Screenshot activity code sheet columns:
