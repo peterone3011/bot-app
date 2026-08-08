@@ -81,13 +81,6 @@ def test_count_unique_lucky_drops_subscribers():
     assert cm._count_unique_role_subscribers(events, start, end, "Lucky Drops") == 1
 
 
-def test_base_date_uses_beijing_midnight_milliseconds():
-    value = cm._base_date_ms(datetime.date(2026, 7, 3))
-    assert datetime.datetime.fromtimestamp(value / 1000, tz=cm._BJT).isoformat() == (
-        "2026-07-03T00:00:00+08:00"
-    )
-
-
 def test_community_metrics_base_target_defaults():
     assert cm.METRICS_BASE_APP_TOKEN == "CeqtbxWt5azkkHs8OzpjZ9D1p2e"
     assert cm.METRICS_BASE_TABLE_ID == "tblMeRm8yocZPqUR"
@@ -128,10 +121,9 @@ def test_write_daily_includes_unique_lucky_drops_subscribers(monkeypatch):
     asyncio.run(cog._write_daily(datetime.date(2026, 7, 28)))
 
     assert cog.base.upserts[-1] == (
-        "日报 2026/07/28",
+        "2026/07/28",
         {
-            "记录": "日报 2026/07/28",
-            "日期": cm._base_date_ms(datetime.date(2026, 7, 28)),
+            "日期": "2026/07/28",
             "当前总人数": 540,
             "新增人数": 1,
             "离开人数": 0,
@@ -152,7 +144,7 @@ def test_base_client_paginates_and_updates_one_matching_record():
         if method == "GET" and "page_token" not in kwargs.get("params", {}):
             return {
                 "data": {
-                    "items": [{"record_id": "other", "fields": {"记录": "日报 2026/08/06"}}],
+                    "items": [{"record_id": "other", "fields": {"日期": "2026/08/06"}}],
                     "has_more": True,
                     "page_token": "next-page",
                 }
@@ -160,7 +152,7 @@ def test_base_client_paginates_and_updates_one_matching_record():
         if method == "GET":
             return {
                 "data": {
-                    "items": [{"record_id": "target", "fields": {"记录": "日报 2026/08/07"}}],
+                    "items": [{"record_id": "target", "fields": {"日期": "2026/08/07"}}],
                     "has_more": False,
                 }
             }
@@ -168,7 +160,7 @@ def test_base_client_paginates_and_updates_one_matching_record():
 
     client._request = fake_request
     result = asyncio.run(
-        client.upsert_record("日报 2026/08/07", {"记录": "日报 2026/08/07", "当前总人数": 801})
+        client.upsert_record("2026/08/07", {"日期": "2026/08/07", "当前总人数": 801})
     )
 
     assert result == "updated"
@@ -177,7 +169,7 @@ def test_base_client_paginates_and_updates_one_matching_record():
         "PUT",
         f"/bitable/v1/apps/{cm.METRICS_BASE_APP_TOKEN}/tables/"
         f"{cm.METRICS_BASE_TABLE_ID}/records/target",
-        {"json": {"fields": {"记录": "日报 2026/08/07", "当前总人数": 801}}},
+        {"json": {"fields": {"日期": "2026/08/07", "当前总人数": 801}}},
     )
 
 
@@ -201,7 +193,7 @@ def test_write_daily_queues_payload_after_final_base_failure(monkeypatch):
 
     asyncio.run(cog._write_daily(datetime.date(2026, 8, 7)))
 
-    assert queued[0][0] == "日报 2026/08/07"
+    assert queued[0][0] == "2026/08/07"
     assert queued[0][1]["当前总人数"] == 540
 
 
@@ -228,9 +220,9 @@ def test_base_client_creates_when_key_is_missing():
         return {"data": {}}
 
     client._request = fake_request
-    fields = {"记录": "日报 2026/08/09", "新增人数": 3}
+    fields = {"日期": "2026/08/09", "新增人数": 3}
 
-    result = asyncio.run(client.upsert_record("日报 2026/08/09", fields))
+    result = asyncio.run(client.upsert_record("2026/08/09", fields))
 
     assert result == "created"
     assert calls[-1] == (
@@ -238,7 +230,7 @@ def test_base_client_creates_when_key_is_missing():
         f"/bitable/v1/apps/{cm.METRICS_BASE_APP_TOKEN}/tables/"
         f"{cm.METRICS_BASE_TABLE_ID}/records",
         {
-            "params": {"client_token": cm._create_client_token("日报 2026/08/09")},
+            "params": {"client_token": cm._create_client_token("2026/08/09")},
             "json": {"fields": fields},
         },
     )
@@ -253,8 +245,8 @@ def test_base_client_rejects_duplicate_remote_keys_before_writing():
         return {
             "data": {
                 "items": [
-                    {"record_id": "one", "fields": {"记录": "日报 2026/08/07"}},
-                    {"record_id": "two", "fields": {"记录": "日报 2026/08/07"}},
+                    {"record_id": "one", "fields": {"日期": "2026/08/07"}},
+                    {"record_id": "two", "fields": {"日期": "2026/08/07"}},
                 ],
                 "has_more": False,
             }
@@ -263,15 +255,15 @@ def test_base_client_rejects_duplicate_remote_keys_before_writing():
     client._request = fake_request
 
     with pytest.raises(RuntimeError, match="duplicate Base records"):
-        asyncio.run(client.upsert_record("日报 2026/08/07", {"记录": "日报 2026/08/07"}))
+        asyncio.run(client.upsert_record("2026/08/07", {"日期": "2026/08/07"}))
 
     assert [method for method, _, _ in calls] == ["GET"]
 
 
 def test_create_client_token_is_stable_uuid4_per_record_key():
-    first = cm._create_client_token("日报 2026/08/07")
-    second = cm._create_client_token("日报 2026/08/07")
-    other = cm._create_client_token("日报 2026/08/08")
+    first = cm._create_client_token("2026/08/07")
+    second = cm._create_client_token("2026/08/07")
+    other = cm._create_client_token("2026/08/08")
 
     assert first == second
     assert first != other
@@ -291,7 +283,7 @@ def test_upsert_retry_recovers_from_transient_failures():
 
     base = FlakyBase()
     result = asyncio.run(
-        cm._upsert_with_retry(base, "日报 2026/08/07", {"记录": "日报 2026/08/07"}, delays=(0, 0))
+        cm._upsert_with_retry(base, "2026/08/07", {"日期": "2026/08/07"}, delays=(0, 0))
     )
 
     assert result == "created"
@@ -303,18 +295,18 @@ def test_pending_rollup_is_persisted_and_replayed(monkeypatch):
     pending_file.parent.mkdir(exist_ok=True)
     pending_file.unlink(missing_ok=True)
     monkeypatch.setattr(cm, "_PENDING_ROLLUPS_FILE", pending_file)
-    fields = {"记录": "日报 2026/08/07", "当前总人数": 801}
+    fields = {"日期": "2026/08/07", "当前总人数": 801}
 
     try:
-        asyncio.run(cm._queue_pending_rollup("日报 2026/08/07", fields))
+        asyncio.run(cm._queue_pending_rollup("2026/08/07", fields))
 
         assert json.loads(pending_file.read_text(encoding="utf-8")) == {
-            "日报 2026/08/07": fields
+            "2026/08/07": fields
         }
 
         class HealthyBase:
             async def upsert_record(self, key, payload):
-                assert key == "日报 2026/08/07"
+                assert key == "2026/08/07"
                 assert payload == fields
                 return "created"
 
@@ -326,14 +318,47 @@ def test_pending_rollup_is_persisted_and_replayed(monkeypatch):
         pending_file.with_suffix(".lock").unlink(missing_ok=True)
 
 
+def test_legacy_daily_pending_payload_is_normalized_for_single_date_schema(monkeypatch):
+    pending_file = Path("work/test-community-metrics-legacy-pending.json")
+    pending_file.parent.mkdir(exist_ok=True)
+    pending_file.write_text(
+        json.dumps(
+            {
+                "日报 2026/08/07": {
+                    "记录": "日报 2026/08/07",
+                    "日期": 1786032000000,
+                    "当前总人数": 801,
+                    "新增人数": 3,
+                },
+                "周报 2026/08/02": {"记录": "周报 2026/08/02"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cm, "_PENDING_ROLLUPS_FILE", pending_file)
+
+    try:
+        assert cm._load_pending_rollups_sync() == {
+            "2026/08/07": {
+                "日期": "2026/08/07",
+                "当前总人数": 801,
+                "新增人数": 3,
+            }
+        }
+    finally:
+        pending_file.unlink(missing_ok=True)
+        pending_file.with_suffix(".lock").unlink(missing_ok=True)
+
+
 def test_removing_completed_rollup_preserves_newer_pending_payload(monkeypatch):
     pending_file = Path("work/test-community-metrics-newer-pending.json")
     pending_file.parent.mkdir(exist_ok=True)
     pending_file.unlink(missing_ok=True)
     monkeypatch.setattr(cm, "_PENDING_ROLLUPS_FILE", pending_file)
-    key = "日报 2026/08/07"
-    old_fields = {"记录": key, "当前总人数": 800}
-    new_fields = {"记录": key, "当前总人数": 801}
+    key = "2026/08/07"
+    old_fields = {"日期": key, "当前总人数": 800}
+    new_fields = {"日期": key, "当前总人数": 801}
 
     try:
         asyncio.run(cm._queue_pending_rollup(key, old_fields))
@@ -348,7 +373,7 @@ def test_removing_completed_rollup_preserves_newer_pending_payload(monkeypatch):
 
 def test_persisted_upsert_queues_before_remote_write_and_clears_after_success(monkeypatch):
     calls = []
-    fields = {"记录": "日报 2026/08/07", "当前总人数": 801}
+    fields = {"日期": "2026/08/07", "当前总人数": 801}
 
     async def queue(key, payload):
         calls.append(("queue", key, payload))
@@ -365,7 +390,7 @@ def test_persisted_upsert_queues_before_remote_write_and_clears_after_success(mo
     monkeypatch.setattr(cm, "_remove_pending_rollup", remove)
 
     result = asyncio.run(
-        cm._persisted_upsert(Base(), "日报 2026/08/07", fields, delays=())
+        cm._persisted_upsert(Base(), "2026/08/07", fields, delays=())
     )
 
     assert result == "updated"

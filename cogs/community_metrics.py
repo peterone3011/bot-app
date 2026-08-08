@@ -41,6 +41,16 @@ LUCKY_DROPS_ROLE_NAME = os.getenv(
     "METRICS_LUCKY_DROPS_ROLE_NAME",
     "Lucky Drops",
 )
+DAILY_BASE_FIELDS = (
+    "日期",
+    "当前总人数",
+    "新增人数",
+    "离开人数",
+    "净增长",
+    "Gaming Alerts 新增订阅人数",
+    "Exclusive Updates 新增订阅人数",
+    "Lucky Drops 新增订阅人数",
+)
 EventType = Literal["join", "leave", "role_subscribe"]
 
 
@@ -101,11 +111,6 @@ def _count_unique_role_subscribers(
 
 def _format_metric_date(day: datetime.date) -> str:
     return day.strftime("%Y/%m/%d")
-
-
-def _base_date_ms(day: datetime.date) -> int:
-    value = datetime.datetime.combine(day, datetime.time.min, tzinfo=_BJT)
-    return int(value.timestamp() * 1000)
 
 
 async def record_metric_event(
@@ -182,11 +187,32 @@ def _load_pending_rollups_unlocked() -> dict[str, dict[str, object]]:
         return {}
     if not isinstance(data, dict):
         raise RuntimeError("community metrics pending file must contain an object")
-    return {
-        str(key): fields
-        for key, fields in data.items()
-        if isinstance(fields, dict)
-    }
+    pending: dict[str, dict[str, object]] = {}
+    for raw_key, fields in data.items():
+        if not isinstance(fields, dict):
+            continue
+        key = str(raw_key)
+        if key.startswith("周报 "):
+            continue
+        date_text = key.removeprefix("日报 ")
+        try:
+            parsed = datetime.datetime.strptime(date_text, "%Y/%m/%d").date()
+        except ValueError:
+            pending[key] = fields
+            continue
+        if parsed.strftime("%Y/%m/%d") != date_text:
+            pending[key] = fields
+            continue
+        normalized = {
+            field_name: fields[field_name]
+            for field_name in DAILY_BASE_FIELDS
+            if field_name in fields and field_name != "日期"
+        }
+        normalized = {"日期": date_text, **normalized}
+        if date_text in pending and pending[date_text] != normalized:
+            raise RuntimeError(f"conflicting pending rollups for {date_text}")
+        pending[date_text] = normalized
+    return pending
 
 
 def _write_pending_rollups_unlocked(pending: dict[str, dict[str, object]]) -> None:
@@ -408,7 +434,7 @@ class LarkBaseClient:
             matches = [
                 record
                 for record in records
-                if _extract_lark_text((record.get("fields") or {}).get("记录")) == key
+                if _extract_lark_text((record.get("fields") or {}).get("日期")) == key
             ]
             if len(matches) > 1:
                 raise RuntimeError(f"duplicate Base records for key {key!r}")
@@ -497,10 +523,9 @@ class CommunityMetricsCog(commands.Cog):
         )
         total_members = guild.member_count or len([m for m in guild.members if not m.bot])
         date_text = _format_metric_date(day)
-        key = f"日报 {date_text}"
+        key = date_text
         fields: dict[str, object] = {
-            "记录": key,
-            "日期": _base_date_ms(day),
+            "日期": date_text,
             "当前总人数": total_members,
             "新增人数": joins,
             "离开人数": leaves,
