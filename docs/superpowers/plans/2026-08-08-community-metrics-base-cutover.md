@@ -117,4 +117,3 @@ Set `COMMUNITY_METRICS_BASE_APP_TOKEN=CeqtbxWt5azkkHs8OzpjZ9D1p2e` and `COMMUNIT
 - [ ] **Step 5: Verify production startup**
 
 Confirm the CommunityMetrics cog starts without Lark or Discord errors. Do not manually trigger a rollup unless explicitly requested; the next scheduled 23:59 run performs the first production Base upsert.
-
