@@ -35,21 +35,12 @@ METRICS_BASE_TABLE_ID = os.getenv(
     "tblMeRm8yocZPqUR",
 )
 
-GAMING_ROLE_NAME = os.getenv("METRICS_GAMING_ROLE_NAME", "Gaming Alerts")
-UPDATES_ROLE_NAME = os.getenv("METRICS_UPDATES_ROLE_NAME", "Exclusive Updates")
-LUCKY_DROPS_ROLE_NAME = os.getenv(
-    "METRICS_LUCKY_DROPS_ROLE_NAME",
-    "Lucky Drops",
-)
 DAILY_BASE_FIELDS = (
     "日期",
     "当前总人数",
     "新增人数",
     "离开人数",
     "净增长",
-    "Gaming Alerts 新增订阅人数",
-    "Exclusive Updates 新增订阅人数",
-    "Lucky Drops 新增订阅人数",
 )
 EventType = Literal["join", "leave", "role_subscribe"]
 
@@ -513,14 +504,6 @@ class CommunityMetricsCog(commands.Cog):
         start, end = _day_window(day)
         joins = _count_events(events, "join", start, end)
         leaves = _count_events(events, "leave", start, end)
-        gaming_subs = _count_unique_role_subscribers(events, start, end, GAMING_ROLE_NAME)
-        updates_subs = _count_unique_role_subscribers(events, start, end, UPDATES_ROLE_NAME)
-        lucky_drops_subs = _count_unique_role_subscribers(
-            events,
-            start,
-            end,
-            LUCKY_DROPS_ROLE_NAME,
-        )
         total_members = guild.member_count or len([m for m in guild.members if not m.bot])
         date_text = _format_metric_date(day)
         key = date_text
@@ -530,9 +513,6 @@ class CommunityMetricsCog(commands.Cog):
             "新增人数": joins,
             "离开人数": leaves,
             "净增长": joins - leaves,
-            "Gaming Alerts 新增订阅人数": gaming_subs,
-            "Exclusive Updates 新增订阅人数": updates_subs,
-            "Lucky Drops 新增订阅人数": lucky_drops_subs,
         }
         try:
             action = await _persisted_upsert(self.base, key, fields)

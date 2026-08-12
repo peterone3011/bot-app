@@ -109,7 +109,7 @@ def test_cog_has_no_weekly_rollup_task():
     assert not hasattr(cm.CommunityMetricsCog, "weekly_rollup")
 
 
-def test_write_daily_includes_unique_lucky_drops_subscribers(monkeypatch):
+def test_write_daily_excludes_role_subscription_fields(monkeypatch):
     guild = type("Guild", (), {"member_count": 540, "members": []})()
     events = [
         {"type": "join", "ts": "2026-07-28T01:00:00+08:00"},
@@ -128,9 +128,6 @@ def test_write_daily_includes_unique_lucky_drops_subscribers(monkeypatch):
             "新增人数": 1,
             "离开人数": 0,
             "净增长": 1,
-            "Gaming Alerts 新增订阅人数": 0,
-            "Exclusive Updates 新增订阅人数": 0,
-            "Lucky Drops 新增订阅人数": 1,
         },
     )
 
@@ -329,6 +326,9 @@ def test_legacy_daily_pending_payload_is_normalized_for_single_date_schema(monke
                     "日期": 1786032000000,
                     "当前总人数": 801,
                     "新增人数": 3,
+                    "Gaming Alerts 新增订阅人数": 4,
+                    "Exclusive Updates 新增订阅人数": 5,
+                    "Lucky Drops 新增订阅人数": 6,
                 },
                 "周报 2026/08/02": {"记录": "周报 2026/08/02"},
             },
