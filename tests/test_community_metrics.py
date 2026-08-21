@@ -81,9 +81,14 @@ def test_count_unique_lucky_drops_subscribers():
     assert cm._count_unique_role_subscribers(events, start, end, "Lucky Drops") == 1
 
 
-def test_community_metrics_base_target_defaults():
-    assert cm.METRICS_BASE_APP_TOKEN == "CeqtbxWt5azkkHs8OzpjZ9D1p2e"
-    assert cm.METRICS_BASE_TABLE_ID == "tblMeRm8yocZPqUR"
+def test_community_metrics_uses_feishu_api_configuration():
+    assert cm.FEISHU_API_BASE == "https://open.feishu.cn/open-apis"
+    assert hasattr(cm, "FEISHU_APP_ID")
+    assert hasattr(cm, "FEISHU_APP_SECRET")
+    assert hasattr(cm, "FEISHU_METRICS_BASE_APP_TOKEN")
+    assert hasattr(cm, "FEISHU_METRICS_TABLE_ID")
+    assert not hasattr(cm, "LARK_BASE")
+    assert not hasattr(cm, "METRICS_BASE_APP_TOKEN")
 
 
 class _FakeBase:
@@ -133,7 +138,7 @@ def test_write_daily_excludes_role_subscription_fields(monkeypatch):
 
 
 def test_base_client_paginates_and_updates_one_matching_record():
-    client = cm.LarkBaseClient()
+    client = cm.FeishuBaseClient()
     calls = []
 
     async def fake_request(method, path, **kwargs):
@@ -164,8 +169,8 @@ def test_base_client_paginates_and_updates_one_matching_record():
     assert calls[1][2]["params"]["page_token"] == "next-page"
     assert calls[-1] == (
         "PUT",
-        f"/bitable/v1/apps/{cm.METRICS_BASE_APP_TOKEN}/tables/"
-        f"{cm.METRICS_BASE_TABLE_ID}/records/target",
+        f"/bitable/v1/apps/{cm.FEISHU_METRICS_BASE_APP_TOKEN}/tables/"
+        f"{cm.FEISHU_METRICS_TABLE_ID}/records/target",
         {"json": {"fields": {"日期": "2026/08/07", "当前总人数": 801}}},
     )
 
@@ -194,20 +199,20 @@ def test_write_daily_queues_payload_after_final_base_failure(monkeypatch):
     assert queued[0][1]["当前总人数"] == 540
 
 
-def test_decode_lark_response_rejects_non_json_and_api_errors():
+def test_decode_feishu_response_rejects_non_json_and_api_errors():
     with pytest.raises(RuntimeError, match="non-JSON HTTP 502"):
-        cm._decode_lark_response("GET", 502, "upstream unavailable")
+        cm._decode_feishu_response("GET", 502, "upstream unavailable")
 
     with pytest.raises(RuntimeError, match="HTTP 401: invalid token"):
-        cm._decode_lark_response("GET", 401, '{"code": 99991663, "msg": "invalid token"}')
+        cm._decode_feishu_response("GET", 401, '{"code": 99991663, "msg": "invalid token"}')
 
-    assert cm._decode_lark_response("GET", 200, '{"code": 0, "data": {"ok": true}}')[
+    assert cm._decode_feishu_response("GET", 200, '{"code": 0, "data": {"ok": true}}')[
         "data"
     ] == {"ok": True}
 
 
 def test_base_client_creates_when_key_is_missing():
-    client = cm.LarkBaseClient()
+    client = cm.FeishuBaseClient()
     calls = []
 
     async def fake_request(method, path, **kwargs):
@@ -224,8 +229,8 @@ def test_base_client_creates_when_key_is_missing():
     assert result == "created"
     assert calls[-1] == (
         "POST",
-        f"/bitable/v1/apps/{cm.METRICS_BASE_APP_TOKEN}/tables/"
-        f"{cm.METRICS_BASE_TABLE_ID}/records",
+        f"/bitable/v1/apps/{cm.FEISHU_METRICS_BASE_APP_TOKEN}/tables/"
+        f"{cm.FEISHU_METRICS_TABLE_ID}/records",
         {
             "params": {"client_token": cm._create_client_token("2026/08/09")},
             "json": {"fields": fields},
@@ -234,7 +239,7 @@ def test_base_client_creates_when_key_is_missing():
 
 
 def test_base_client_rejects_duplicate_remote_keys_before_writing():
-    client = cm.LarkBaseClient()
+    client = cm.FeishuBaseClient()
     calls = []
 
     async def fake_request(method, path, **kwargs):

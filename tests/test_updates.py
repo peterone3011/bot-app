@@ -13,6 +13,16 @@ _TS_OLDER = 1779062400000
 _TS_FUTURE = 1780531200000  # 2026-06-04 00:00 UTC
 
 
+def test_updates_uses_feishu_api_configuration():
+    assert upd.FEISHU_API_BASE == "https://open.feishu.cn/open-apis"
+    assert hasattr(upd, "FEISHU_APP_ID")
+    assert hasattr(upd, "FEISHU_APP_SECRET")
+    assert hasattr(upd, "FEISHU_UPDATES_BASE_APP_TOKEN")
+    assert hasattr(upd, "FEISHU_UPDATES_TABLE_ID")
+    assert not hasattr(upd, "LARK_BASE")
+    assert not hasattr(upd, "BITABLE_APP_TOKEN")
+
+
 def _rec(ts=_TS_OLDER, status="待发布", content="text", has_image=False):
     fields = {
         upd._FLD_DATE: str(ts),
@@ -233,7 +243,7 @@ def test_final_slot_failure_completes_without_external_alert(monkeypatch, capsys
     cog = _make_cog()
     monkeypatch.setattr(cog, "_do_post", AsyncMock(return_value=False))
     send_alert = AsyncMock()
-    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
+    monkeypatch.setattr(upd, "_send_feishu_dm", send_alert)
 
     asyncio.run(cog._run_attempt(_bjt(0, 16), datetime.time(0, 16)))
 
@@ -255,7 +265,7 @@ def test_earlier_slot_failure_after_deadline_completes_without_external_alert(
 
     send_alert = AsyncMock()
     monkeypatch.setattr(cog, "_do_post", AsyncMock(side_effect=do_post))
-    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
+    monkeypatch.setattr(upd, "_send_feishu_dm", send_alert)
 
     asyncio.run(cog._run_attempt(_bjt(0, 1), datetime.time(0, 1)))
 
@@ -271,7 +281,7 @@ def test_final_slot_expired_while_waiting_for_lock_skips_bitable_read(monkeypatc
     read_records = AsyncMock(return_value=[])
     send_alert = AsyncMock()
     monkeypatch.setattr(upd, "_read_bitable_records", read_records)
-    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
+    monkeypatch.setattr(upd, "_send_feishu_dm", send_alert)
 
     async def run():
         await cog._run_lock.acquire()
@@ -437,7 +447,7 @@ def test_deadline_restore_failure_logs_without_external_alert(monkeypatch, capsy
         upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)])
     )
     monkeypatch.setattr(upd, "_update_record_status_with_retry", AsyncMock(side_effect=update_status))
-    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
+    monkeypatch.setattr(upd, "_send_feishu_dm", send_alert)
 
     assert asyncio.run(cog._do_post(today=_TODAY, deadline=_bjt(0, 30))) is False
     send_alert.assert_not_awaited()
@@ -459,7 +469,7 @@ def test_discord_failure_restore_failure_logs_without_external_alert(monkeypatch
         upd, "_read_bitable_records", AsyncMock(return_value=[_rec(_TS_YESTERDAY)])
     )
     monkeypatch.setattr(upd, "_update_record_status_with_retry", AsyncMock(side_effect=update_status))
-    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
+    monkeypatch.setattr(upd, "_send_feishu_dm", send_alert)
 
     assert asyncio.run(cog._do_post(today=_TODAY)) is False
     send_alert.assert_not_awaited()
@@ -574,7 +584,7 @@ def test_do_post_stops_after_done_status_failure(monkeypatch):
         AsyncMock(side_effect=[None, RuntimeError("done status failed")]),
     )
     send_alert = AsyncMock()
-    monkeypatch.setattr(upd, "_send_lark_dm", send_alert)
+    monkeypatch.setattr(upd, "_send_feishu_dm", send_alert)
 
     assert asyncio.run(cog._do_post(today=_TODAY)) is True
     send_alert.assert_awaited_once()

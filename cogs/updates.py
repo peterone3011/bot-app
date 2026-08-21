@@ -26,14 +26,16 @@ _CHECK_TIMES_UTC = [
 
 UPDATE_CHANNEL_ID: int = int(os.getenv("UPDATE_CHANNEL_ID", "0"))
 STAFF_CHAT_CHANNEL_ID: int = int(os.getenv("STAFF_CHAT_CHANNEL_ID", "0"))
-LARK_BASE = "https://open.larksuite.com/open-apis"
-LARK_APP_ID: str = os.getenv("LARK_APP_ID", "")
-LARK_APP_SECRET: str = os.getenv("LARK_APP_SECRET", "")
-LARK_NOTIFY_CHAT_ID: str = os.getenv("LARK_NOTIFY_CHAT_ID", "")
+FEISHU_API_BASE = "https://open.feishu.cn/open-apis"
+FEISHU_APP_ID: str = os.getenv("FEISHU_APP_ID", "")
+FEISHU_APP_SECRET: str = os.getenv("FEISHU_APP_SECRET", "")
+FEISHU_NOTIFY_CHAT_ID: str = os.getenv("FEISHU_NOTIFY_CHAT_ID", "")
 
-BITABLE_APP_TOKEN: str = os.getenv("BITABLE_APP_TOKEN", "IPG2bxK0IanGwksBqVljigsMpcb")
-BITABLE_TABLE_ID: str = os.getenv("BITABLE_TABLE_ID", "tble5kqGbD4P0aHy")
-# Bitable field names (larksuite international API returns field names, not IDs)
+FEISHU_UPDATES_BASE_APP_TOKEN: str = os.getenv(
+    "FEISHU_UPDATES_BASE_APP_TOKEN", ""
+)
+FEISHU_UPDATES_TABLE_ID: str = os.getenv("FEISHU_UPDATES_TABLE_ID", "")
+# Bitable field names (the API returns field names, not field IDs).
 _FLD_DATE = "日期"
 _FLD_CONTENT = "发布文案"
 _FLD_IMAGE = "配图"
@@ -106,38 +108,39 @@ def _has_invalid_pending_date(rec: dict) -> bool:
     return False
 
 
-# ── Lark API client ───────────────────────────────────────────────────────────
+# ── Feishu API client ─────────────────────────────────────────────────────────
 
-async def _send_lark_dm(text: str) -> None:
-    if not LARK_NOTIFY_CHAT_ID:
+async def _send_feishu_dm(text: str) -> None:
+    if not FEISHU_NOTIFY_CHAT_ID:
         return
-    token = await _get_lark_token()
+    token = await _get_feishu_token()
     async with aiohttp.ClientSession() as session:
         await session.post(
-            f"{LARK_BASE}/im/v1/messages?receive_id_type=chat_id",
+            f"{FEISHU_API_BASE}/im/v1/messages?receive_id_type=chat_id",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"receive_id": LARK_NOTIFY_CHAT_ID, "msg_type": "text",
+            json={"receive_id": FEISHU_NOTIFY_CHAT_ID, "msg_type": "text",
                   "content": f'{{"text":"{text}"}}'},
         )
 
 
-async def _get_lark_token() -> str:
+async def _get_feishu_token() -> str:
     async with aiohttp.ClientSession() as session:
         async with session.post(
-            f"{LARK_BASE}/auth/v3/app_access_token/internal",
-            json={"app_id": LARK_APP_ID, "app_secret": LARK_APP_SECRET},
+            f"{FEISHU_API_BASE}/auth/v3/tenant_access_token/internal",
+            json={"app_id": FEISHU_APP_ID, "app_secret": FEISHU_APP_SECRET},
         ) as resp:
             data = await resp.json()
             if data.get("code") != 0:
-                raise RuntimeError(f"Lark token error: {data.get('msg')}")
-            return data["app_access_token"]
+                raise RuntimeError(f"Feishu token error: {data.get('msg')}")
+            return data["tenant_access_token"]
 
 
 async def _read_bitable_records() -> list:
-    token = await _get_lark_token()
+    token = await _get_feishu_token()
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f"{LARK_BASE}/bitable/v1/apps/{BITABLE_APP_TOKEN}/tables/{BITABLE_TABLE_ID}/records",
+            f"{FEISHU_API_BASE}/bitable/v1/apps/{FEISHU_UPDATES_BASE_APP_TOKEN}"
+            f"/tables/{FEISHU_UPDATES_TABLE_ID}/records",
             params={"page_size": "100"},
             headers={"Authorization": f"Bearer {token}"},
         ) as resp:
@@ -148,7 +151,7 @@ async def _read_bitable_records() -> list:
 
 
 async def _download_bitable_image(url: str) -> bytes:
-    token = await _get_lark_token()
+    token = await _get_feishu_token()
     async with aiohttp.ClientSession() as session:
         async with session.get(
             url,
@@ -160,10 +163,11 @@ async def _download_bitable_image(url: str) -> bytes:
 
 
 async def _update_record_status(record_id: str, status: str) -> None:
-    token = await _get_lark_token()
+    token = await _get_feishu_token()
     async with aiohttp.ClientSession() as session:
         async with session.put(
-            f"{LARK_BASE}/bitable/v1/apps/{BITABLE_APP_TOKEN}/tables/{BITABLE_TABLE_ID}/records/{record_id}",
+            f"{FEISHU_API_BASE}/bitable/v1/apps/{FEISHU_UPDATES_BASE_APP_TOKEN}"
+            f"/tables/{FEISHU_UPDATES_TABLE_ID}/records/{record_id}",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json={"fields": {_FLD_STATUS: status}},
         ) as resp:
@@ -465,7 +469,7 @@ class UpdatesCog(commands.Cog):
                 note = f"Status writeback failed for record {record_id}; message was sent."
                 print(f"[updates] {note}: {exc}", flush=True)
                 try:
-                    await _send_lark_dm(note)
+                    await _send_feishu_dm(note)
                 except Exception as alert_exc:
                     print(f"[updates] Failed to send status alert: {alert_exc}", flush=True)
         return success

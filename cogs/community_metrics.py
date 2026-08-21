@@ -23,17 +23,13 @@ _EVENTS_FILE = _DATA_DIR / "community_metrics_events.jsonl"
 _PENDING_ROLLUPS_FILE = _DATA_DIR / "community_metrics_pending.json"
 _PENDING_ROLLUPS_LOCK = asyncio.Lock()
 
-LARK_BASE = "https://open.larksuite.com/open-apis"
-LARK_APP_ID = os.getenv("LARK_APP_ID", "")
-LARK_APP_SECRET = os.getenv("LARK_APP_SECRET", "")
-METRICS_BASE_APP_TOKEN = os.getenv(
-    "COMMUNITY_METRICS_BASE_APP_TOKEN",
-    "CeqtbxWt5azkkHs8OzpjZ9D1p2e",
+FEISHU_API_BASE = "https://open.feishu.cn/open-apis"
+FEISHU_APP_ID = os.getenv("FEISHU_APP_ID", "")
+FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET", "")
+FEISHU_METRICS_BASE_APP_TOKEN = os.getenv(
+    "FEISHU_METRICS_BASE_APP_TOKEN", ""
 )
-METRICS_BASE_TABLE_ID = os.getenv(
-    "COMMUNITY_METRICS_BASE_TABLE_ID",
-    "tblMeRm8yocZPqUR",
-)
+FEISHU_METRICS_TABLE_ID = os.getenv("FEISHU_METRICS_TABLE_ID", "")
 
 DAILY_BASE_FIELDS = (
     "日期",
@@ -143,7 +139,9 @@ async def _load_events() -> list[dict[str, Any]]:
 
 
 def _create_client_token(key: str) -> str:
-    seed = f"{METRICS_BASE_APP_TOKEN}:{METRICS_BASE_TABLE_ID}:{key}".encode("utf-8")
+    seed = (
+        f"{FEISHU_METRICS_BASE_APP_TOKEN}:{FEISHU_METRICS_TABLE_ID}:{key}"
+    ).encode("utf-8")
     raw = bytearray(hashlib.sha256(seed).digest()[:16])
     raw[6] = (raw[6] & 0x0F) | 0x40
     raw[8] = (raw[8] & 0x3F) | 0x80
@@ -310,7 +308,7 @@ async def _flush_pending_rollups(
     return completed
 
 
-def _extract_lark_text(value: Any) -> str:
+def _extract_feishu_text(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
@@ -322,23 +320,23 @@ def _extract_lark_text(value: Any) -> str:
     return str(value)
 
 
-def _decode_lark_response(method: str, status: int, raw: str) -> dict[str, Any]:
+def _decode_feishu_response(method: str, status: int, raw: str) -> dict[str, Any]:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise RuntimeError(
-            f"Lark Base {method} returned non-JSON HTTP {status}: {raw[:200]}"
+            f"Feishu Base {method} returned non-JSON HTTP {status}: {raw[:200]}"
         ) from exc
     if not isinstance(data, dict):
-        raise RuntimeError(f"Lark Base {method} returned an invalid JSON payload")
+        raise RuntimeError(f"Feishu Base {method} returned an invalid JSON payload")
     if status >= 400 or data.get("code") != 0:
         raise RuntimeError(
-            f"Lark Base {method} error: HTTP {status}: {data.get('msg')}"
+            f"Feishu Base {method} error: HTTP {status}: {data.get('msg')}"
         )
     return data
 
 
-class LarkBaseClient:
+class FeishuBaseClient:
     def __init__(self) -> None:
         self._token: str | None = None
         self._token_expires_at = datetime.datetime.min.replace(tzinfo=_UTC)
@@ -350,15 +348,15 @@ class LarkBaseClient:
             return self._token
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"{LARK_BASE}/auth/v3/app_access_token/internal",
-                json={"app_id": LARK_APP_ID, "app_secret": LARK_APP_SECRET},
+                f"{FEISHU_API_BASE}/auth/v3/tenant_access_token/internal",
+                json={"app_id": FEISHU_APP_ID, "app_secret": FEISHU_APP_SECRET},
             ) as resp:
                 data = await resp.json(content_type=None)
         if resp.status >= 400 or data.get("code") != 0:
-            raise RuntimeError(f"Lark token error: HTTP {resp.status}: {data.get('msg')}")
+            raise RuntimeError(f"Feishu token error: HTTP {resp.status}: {data.get('msg')}")
         token = str(data.get("tenant_access_token") or "")
         if not token:
-            raise RuntimeError("Lark token response missing tenant_access_token")
+            raise RuntimeError("Feishu token response missing tenant_access_token")
         self._token = token
         self._token_expires_at = now + datetime.timedelta(
             seconds=max(60, int(data.get("expire", 3600)) - 300)
@@ -377,7 +375,7 @@ class LarkBaseClient:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
             async with session.request(
                 method,
-                f"{LARK_BASE}{path}",
+                f"{FEISHU_API_BASE}{path}",
                 params=params,
                 json=json,
                 headers={
@@ -388,7 +386,7 @@ class LarkBaseClient:
                 raw = await resp.text()
                 status = resp.status
         try:
-            return _decode_lark_response(method, status, raw)
+            return _decode_feishu_response(method, status, raw)
         except Exception:
             self._token = None
             self._token_expires_at = datetime.datetime.min.replace(tzinfo=_UTC)
@@ -403,8 +401,8 @@ class LarkBaseClient:
                 params["page_token"] = page_token
             data = await self._request(
                 "GET",
-                f"/bitable/v1/apps/{METRICS_BASE_APP_TOKEN}/tables/"
-                f"{METRICS_BASE_TABLE_ID}/records",
+                f"/bitable/v1/apps/{FEISHU_METRICS_BASE_APP_TOKEN}/tables/"
+                f"{FEISHU_METRICS_TABLE_ID}/records",
                 params=params,
             )
             page = data.get("data", {})
@@ -413,7 +411,7 @@ class LarkBaseClient:
                 return records
             page_token = str(page.get("page_token") or "")
             if not page_token:
-                raise RuntimeError("Lark Base pagination missing page_token")
+                raise RuntimeError("Feishu Base pagination missing page_token")
 
     async def upsert_record(
         self,
@@ -425,13 +423,13 @@ class LarkBaseClient:
             matches = [
                 record
                 for record in records
-                if _extract_lark_text((record.get("fields") or {}).get("日期")) == key
+                if _extract_feishu_text((record.get("fields") or {}).get("日期")) == key
             ]
             if len(matches) > 1:
                 raise RuntimeError(f"duplicate Base records for key {key!r}")
             base_path = (
-                f"/bitable/v1/apps/{METRICS_BASE_APP_TOKEN}/tables/"
-                f"{METRICS_BASE_TABLE_ID}/records"
+                f"/bitable/v1/apps/{FEISHU_METRICS_BASE_APP_TOKEN}/tables/"
+                f"{FEISHU_METRICS_TABLE_ID}/records"
             )
             if matches:
                 await self._request(
@@ -452,7 +450,7 @@ class LarkBaseClient:
 class CommunityMetricsCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.base = LarkBaseClient()
+        self.base = FeishuBaseClient()
         self._pending_replay_task = asyncio.create_task(self._replay_pending_after_ready())
         self.daily_rollup.start()
 
