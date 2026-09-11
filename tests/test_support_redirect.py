@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import discord
 import pytest
 
 from cogs.support_redirect import (
     SupportRedirectConfig,
+    SupportRedirectCog,
+    build_support_embed,
     is_financial_support_issue,
     normalize_message,
 )
@@ -90,3 +97,117 @@ def test_enabled_config_rejects_invalid_values(overrides: dict[str, str]) -> Non
     environ.update(overrides)
     with pytest.raises(ValueError):
         SupportRedirectConfig.from_env(environ)
+
+
+def make_message(
+    *,
+    content: str = "withdrawal pending",
+    channel_id: int = 101,
+    user_id: int = 202,
+    bot: bool = False,
+):
+    return SimpleNamespace(
+        id=303,
+        content=content,
+        guild=SimpleNamespace(id=404),
+        channel=SimpleNamespace(id=channel_id),
+        author=SimpleNamespace(id=user_id, bot=bot),
+        reply=AsyncMock(),
+    )
+
+
+def enabled_config() -> SupportRedirectConfig:
+    return SupportRedirectConfig(True, frozenset({101, 102, 103}), 505, 600)
+
+
+def test_support_embed_contains_approved_copy() -> None:
+    embed = build_support_embed(505)
+    assert embed.title == "⚠️ Discord cannot handle order-related issues"
+    assert embed.color.value == 0xED4245
+    assert "deposit, withdrawal, or refund issues" in embed.description
+    assert "<#505>" in embed.description
+    assert "queue" not in embed.description.casefold()
+    assert "reward" not in embed.description.casefold()
+
+
+@pytest.mark.asyncio
+async def test_listener_replies_without_mentions() -> None:
+    message = make_message()
+    cog = SupportRedirectCog(SimpleNamespace(), enabled_config(), clock=lambda: 1000.0)
+    await cog.on_message(message)
+    message.reply.assert_awaited_once()
+    kwargs = message.reply.await_args.kwargs
+    assert kwargs["mention_author"] is False
+    assert kwargs["embed"].title == "⚠️ Discord cannot handle order-related issues"
+    assert kwargs["allowed_mentions"].everyone is False
+    assert kwargs["allowed_mentions"].roles is False
+    assert kwargs["allowed_mentions"].users is False
+
+
+@pytest.mark.asyncio
+async def test_listener_ignores_bots_unlisted_channels_and_nonmatches() -> None:
+    cog = SupportRedirectCog(SimpleNamespace(), enabled_config(), clock=lambda: 1000.0)
+    messages = [
+        make_message(bot=True),
+        make_message(channel_id=999),
+        make_message(content="reward missing"),
+    ]
+    for message in messages:
+        await cog.on_message(message)
+        message.reply.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cooldown_is_per_user_and_channel() -> None:
+    now = [1000.0]
+    cog = SupportRedirectCog(SimpleNamespace(), enabled_config(), clock=lambda: now[0])
+    first = make_message()
+    repeated = make_message()
+    other_user = make_message(user_id=203)
+    other_channel = make_message(channel_id=102)
+    await cog.on_message(first)
+    await cog.on_message(repeated)
+    await cog.on_message(other_user)
+    await cog.on_message(other_channel)
+    first.reply.assert_awaited_once()
+    repeated.reply.assert_not_awaited()
+    other_user.reply.assert_awaited_once()
+    other_channel.reply.assert_awaited_once()
+    now[0] += 601
+    await cog.on_message(repeated)
+    repeated.reply.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_failed_reply_does_not_start_cooldown() -> None:
+    message = make_message()
+    message.reply.side_effect = [RuntimeError("network"), None]
+    cog = SupportRedirectCog(SimpleNamespace(), enabled_config(), clock=lambda: 1000.0)
+    await cog.on_message(message)
+    await cog.on_message(message)
+    assert message.reply.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_concurrent_messages_from_same_user_reply_once() -> None:
+    reply_started = asyncio.Event()
+    release_reply = asyncio.Event()
+
+    async def slow_reply(**_kwargs) -> None:
+        reply_started.set()
+        await release_reply.wait()
+
+    first = make_message()
+    second = make_message()
+    first.reply.side_effect = slow_reply
+    cog = SupportRedirectCog(SimpleNamespace(), enabled_config(), clock=lambda: 1000.0)
+
+    first_task = asyncio.create_task(cog.on_message(first))
+    await reply_started.wait()
+    second_task = asyncio.create_task(cog.on_message(second))
+    await asyncio.sleep(0)
+    release_reply.set()
+    await asyncio.gather(first_task, second_task)
+
+    first.reply.assert_awaited_once()
+    second.reply.assert_not_awaited()

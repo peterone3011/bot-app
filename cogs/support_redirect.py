@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Callable, Mapping
+
+import discord
+from discord.ext import commands
 
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
@@ -25,6 +29,7 @@ _CONTEXT_PATTERNS = (
     re.compile(r"\bduplicate\s+charge\b"),
     re.compile(r"\bwrong\s+amount\s+charged\b"),
 )
+_TITLE = "⚠️ Discord cannot handle order-related issues"
 
 
 @dataclass(frozen=True)
@@ -85,4 +90,94 @@ def is_financial_support_issue(content: str) -> bool:
     return any(
         pattern.search(normalized)
         for pattern in _DIRECT_PATTERNS + _CONTEXT_PATTERNS
+    )
+
+
+def build_support_embed(support_channel_id: int) -> discord.Embed:
+    description = (
+        "For any deposit, withdrawal, or refund issues, please contact our live "
+        f"support in <#{support_channel_id}>.\n\n"
+        "Please fill out the form to start a chat with our support team and "
+        "describe your issue clearly."
+    )
+    return discord.Embed(title=_TITLE, description=description, color=0xED4245)
+
+
+class SupportRedirectCog(commands.Cog):
+    def __init__(
+        self,
+        bot: commands.Bot,
+        config: SupportRedirectConfig,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.bot = bot
+        self.config = config
+        self._clock = clock
+        self._cooldowns: dict[tuple[int, int, int], float] = {}
+        self._inflight: set[tuple[int, int, int]] = set()
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        if message.author.bot or message.guild is None:
+            return
+        if message.channel.id not in self.config.trigger_channel_ids:
+            return
+        if not is_financial_support_issue(message.content):
+            return
+
+        now = self._clock()
+        key = (message.guild.id, message.channel.id, message.author.id)
+        if key in self._inflight:
+            return
+        last_reply = self._cooldowns.get(key)
+        if (
+            last_reply is not None
+            and now - last_reply < self.config.cooldown_seconds
+        ):
+            return
+
+        self._cooldowns = {
+            existing_key: timestamp
+            for existing_key, timestamp in self._cooldowns.items()
+            if now - timestamp < self.config.cooldown_seconds
+        }
+        self._inflight.add(key)
+        try:
+            await message.reply(
+                embed=build_support_embed(self.config.support_channel_id),
+                mention_author=False,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except Exception as exc:
+            print(
+                "[support_redirect] Reply failed "
+                f"guild={message.guild.id} channel={message.channel.id} "
+                f"message={message.id} user={message.author.id}: {exc}",
+                flush=True,
+            )
+            return
+        finally:
+            self._inflight.discard(key)
+        self._cooldowns[key] = now
+
+
+async def setup(bot: commands.Bot) -> None:
+    try:
+        config = SupportRedirectConfig.from_env()
+    except ValueError as exc:
+        print(f"[support_redirect] Disabled: {exc}", flush=True)
+        return
+    if not config.enabled:
+        print("[support_redirect] Disabled by configuration", flush=True)
+        return
+
+    await bot.add_cog(SupportRedirectCog(bot, config))
+    channels = ",".join(
+        str(channel_id) for channel_id in sorted(config.trigger_channel_ids)
+    )
+    print(
+        f"[support_redirect] Enabled channels={channels} "
+        f"support_channel={config.support_channel_id} "
+        f"cooldown={config.cooldown_seconds}s",
+        flush=True,
     )
