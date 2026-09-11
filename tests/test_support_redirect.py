@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -211,3 +212,8 @@ async def test_concurrent_messages_from_same_user_reply_once() -> None:
 
     first.reply.assert_awaited_once()
     second.reply.assert_not_awaited()
+
+
+def test_bot_loads_support_redirect_extension() -> None:
+    bot_source = Path("bot.py").read_text(encoding="utf-8")
+    assert 'await bot.load_extension("cogs.support_redirect")' in bot_source

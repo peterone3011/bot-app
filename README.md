@@ -13,6 +13,7 @@ cogs/
   jackpot.py           Daily Jackpot broadcast, gated by JACKPOT_ENABLED
   updates.py           Feishu Bitable -> Discord midnight updates publisher
   community_metrics.py Daily Discord community metrics -> Feishu Base
+  support_redirect.py  Financial support keyword redirect with per-user cooldown
   screenshot_activity.py Screenshot proof reward codes -> Lark Sheet
   autorole.py          Auto-assign member role up to 3000 users
   db.py                Supabase helper used by Bot cogs
@@ -40,6 +41,7 @@ tests/                 Python unit tests
 - **Jackpot**: `cogs/jackpot.py` posts at 19:00 Beijing time when `JACKPOT_ENABLED=1`.
 - **Updates**: `cogs/updates.py` checks Feishu Bitable at Beijing midnight, publishes `待发布` records dated before today, retries read/image/send failures twice, and marks successful records `已发布`.
 - **Community metrics**: `cogs/community_metrics.py` records join/leave events, then upserts daily metrics at 23:59 Beijing time into the Feishu Base table `FP-DC数据`.
+- **Financial support redirect**: `cogs/support_redirect.py` replies to financial-support phrases only in configured channels and directs players to the official live-support channel.
 - **Screenshot activity**: `cogs/screenshot_activity.py` watches one configured Discord channel for image submissions, assigns the next available Lark Sheet code, DMs it to the player, and writes the claim record back to Lark.
 - **Autorole**: `cogs/autorole.py` backfills and assigns the configured member role until the 3000-user cap.
 
@@ -61,6 +63,9 @@ Common Bot variables:
 | `FEISHU_UPDATES_BASE_APP_TOKEN` / `FEISHU_UPDATES_TABLE_ID` | Updates Bitable source |
 | `FEISHU_METRICS_BASE_APP_TOKEN` / `FEISHU_METRICS_TABLE_ID` | Community metrics Base target |
 | `FEISHU_NOTIFY_CHAT_ID` | Optional Feishu failure-notification chat |
+| `SUPPORT_REDIRECT_ENABLED` | Enables the financial support keyword redirect |
+| `SUPPORT_TRIGGER_CHANNEL_IDS` / `SUPPORT_CHANNEL_ID` | Monitored Discord channels and live-support destination |
+| `SUPPORT_REDIRECT_COOLDOWN_SECONDS` | Per-user, per-channel reply cooldown; defaults to 600 seconds |
 | `METRICS_GAMING_ROLE_NAME` / `METRICS_UPDATES_ROLE_NAME` | Optional role-name matching override for metrics |
 | `SCREENSHOT_ACTIVITY_CHANNEL_ID` | Discord channel where players submit screenshot proofs |
 | `SCREENSHOT_CODES_SPREADSHEET_TOKEN` / `SCREENSHOT_CODES_SHEET_ID` | Lark Sheet that stores screenshot activity reward codes |
