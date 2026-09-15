@@ -214,6 +214,7 @@ async def test_concurrent_messages_from_same_user_reply_once() -> None:
     second.reply.assert_not_awaited()
 
 
-def test_bot_loads_support_redirect_extension() -> None:
+def test_shared_entrypoint_does_not_load_retired_support_redirect_extension() -> None:
     bot_source = Path("bot.py").read_text(encoding="utf-8")
-    assert 'await bot.load_extension("cogs.support_redirect")' in bot_source
+    assert 'await bot.load_extension("cogs.support_redirect")' not in bot_source
+    assert "from app.runner import main" in bot_source

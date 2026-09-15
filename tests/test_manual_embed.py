@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.cogs import manual_embed
 from app.cogs.manual_embed import ManualEmbedCog, build_embed, parse_color
 from app.core.config import ChannelConfig, DiscordConfig, FeatureFlags, ProjectConfig
 from app.core.runtime import ProjectRuntime
@@ -127,3 +128,14 @@ async def test_embed_command_allows_any_channel_when_the_allowlist_is_empty() ->
     await cog.publish.callback(cog, call, channel, "Title", "Body", None, None, None, None)
 
     channel.send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_install_restores_the_interactive_embed_builder(monkeypatch) -> None:
+    legacy_setup = AsyncMock()
+    monkeypatch.setattr(manual_embed, "install_interactive_embed_builder", legacy_setup)
+    active = runtime()
+
+    await manual_embed.install(active)
+
+    legacy_setup.assert_awaited_once_with(active.bot)

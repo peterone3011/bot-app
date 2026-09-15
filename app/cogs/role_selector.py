@@ -99,7 +99,9 @@ class RoleSelector(discord.ui.Select):
         self.runtime = runtime
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True, thinking=False)
+        # Re-rendering clears Discord's selected value, so the same role can be
+        # selected again immediately to unsubscribe.
+        await interaction.response.edit_message(view=RoleSelectorView(self.runtime))
         await handle_selection(self.runtime, interaction, self.values[0])
 
 

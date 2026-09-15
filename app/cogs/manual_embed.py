@@ -134,5 +134,12 @@ class ManualEmbedCog(commands.Cog):
         await interaction.edit_original_response(content=f"Published: {message.jump_url}")
 
 
+async def install_interactive_embed_builder(bot: commands.Bot) -> None:
+    """Install the established modal-based builder for FortunePurple compatibility."""
+    from cogs.embed import setup as install_legacy_embed_builder
+
+    await install_legacy_embed_builder(bot)
+
+
 async def install(runtime: ProjectRuntime) -> None:
-    await runtime.bot.add_cog(ManualEmbedCog(runtime))
+    await install_interactive_embed_builder(runtime.bot)

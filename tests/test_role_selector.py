@@ -106,6 +106,31 @@ async def test_existing_role_is_removed() -> None:
 
 
 @pytest.mark.asyncio
+async def test_selector_callback_renders_a_fresh_view_before_handling_selection() -> None:
+    active = runtime()
+    selected_role = SimpleNamespace(id=700, name="Updates")
+    member = SimpleNamespace(roles=[selected_role], remove_roles=AsyncMock(), add_roles=AsyncMock())
+    interaction = SimpleNamespace(
+        user=member,
+        guild=SimpleNamespace(get_role=lambda role_id: selected_role if role_id == 700 else None),
+        response=SimpleNamespace(defer=AsyncMock(), edit_message=AsyncMock()),
+        followup=SimpleNamespace(send=AsyncMock()),
+    )
+    view = RoleSelectorView(active)
+    select = view.children[0]
+    select._values = ["700"]
+
+    await select.callback(interaction)
+
+    interaction.response.edit_message.assert_awaited_once()
+    refreshed_view = interaction.response.edit_message.await_args.kwargs["view"]
+    assert isinstance(refreshed_view, RoleSelectorView)
+    interaction.followup.send.assert_awaited_once_with(
+        "Unsubscribed from **Updates**.", ephemeral=True
+    )
+
+
+@pytest.mark.asyncio
 async def test_missing_configured_role_returns_private_error() -> None:
     member = SimpleNamespace(roles=[], remove_roles=AsyncMock(), add_roles=AsyncMock())
     interaction = SimpleNamespace(
