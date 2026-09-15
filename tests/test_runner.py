@@ -66,3 +66,50 @@ async def test_run_enabled_projects_starts_each_project(monkeypatch, tmp_path: P
 def test_state_root_uses_railway_volume_when_configured() -> None:
     assert runner.state_root({"RAILWAY_VOLUME_MOUNT_PATH": "D:/volume"}) == Path("D:/volume")
     assert runner.state_root({}) == Path("/data")
+
+
+@pytest.mark.asyncio
+async def test_registry_loads_auto_reaction_once_when_both_reaction_flags_are_enabled(
+    monkeypatch,
+) -> None:
+    loaded: list[str] = []
+    assert set(runner.COG_INSTALLERS) == {
+        "manual_embed",
+        "role_selector",
+        "auto_reaction",
+        "daily_updates",
+        "community_metrics",
+    }
+    active = config("alpha", 101)
+    active = ProjectConfig(
+        **{
+            **active.__dict__,
+            "features": FeatureFlags(True, True, True, True, True, True),
+        }
+    )
+    runtime = runner.ProjectRuntime(active, Mock(), runner.ProjectState(Path("/tmp"), "alpha"), None)
+
+    async def installer(name: str) -> None:
+        loaded.append(name)
+
+    monkeypatch.setattr(
+        runner,
+        "COG_INSTALLERS",
+        {
+            "manual_embed": lambda _: installer("manual_embed"),
+            "role_selector": lambda _: installer("role_selector"),
+            "auto_reaction": lambda _: installer("auto_reaction"),
+            "daily_updates": lambda _: installer("daily_updates"),
+            "community_metrics": lambda _: installer("community_metrics"),
+        },
+    )
+
+    await runner.install_enabled_cogs(runtime)
+
+    assert loaded == [
+        "manual_embed",
+        "role_selector",
+        "auto_reaction",
+        "daily_updates",
+        "community_metrics",
+    ]

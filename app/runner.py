@@ -9,6 +9,7 @@ from typing import Callable, Mapping
 import discord
 from discord.ext import commands
 
+from app.cogs import auto_reaction, community_metrics, daily_updates, manual_embed, role_selector
 from app.core.config import ProjectConfig, enabled_project_slugs, load_projects
 from app.core.feishu import FeishuClient
 from app.core.runtime import ProjectRuntime
@@ -16,7 +17,13 @@ from app.core.state import ProjectState
 
 
 CogInstaller = Callable[[ProjectRuntime], object]
-COG_INSTALLERS: dict[str, CogInstaller] = {}
+COG_INSTALLERS: dict[str, CogInstaller] = {
+    "manual_embed": manual_embed.install,
+    "role_selector": role_selector.install,
+    "auto_reaction": auto_reaction.install,
+    "daily_updates": daily_updates.install,
+    "community_metrics": community_metrics.install,
+}
 
 
 def state_root(environ: Mapping[str, str]) -> Path:
@@ -73,11 +80,18 @@ def create_project_bot(config: ProjectConfig) -> commands.Bot:
 
 
 async def install_enabled_cogs(runtime: ProjectRuntime) -> None:
-    enabled = [
-        name
-        for name, enabled in vars(runtime.config.features).items()
-        if enabled and name in COG_INSTALLERS
-    ]
+    features = runtime.config.features
+    enabled: list[str] = []
+    if features.manual_embed:
+        enabled.append("manual_embed")
+    if features.role_selector:
+        enabled.append("role_selector")
+    if features.auto_reaction or features.exclusive_updates_reaction:
+        enabled.append("auto_reaction")
+    if features.daily_updates:
+        enabled.append("daily_updates")
+    if features.community_metrics:
+        enabled.append("community_metrics")
     for name in enabled:
         installer = COG_INSTALLERS[name]
         result = installer(runtime)
