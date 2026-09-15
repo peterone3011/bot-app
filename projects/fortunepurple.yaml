@@ -1,0 +1,76 @@
+project:
+  slug: fortunepurple
+  brand_name: FortunePurple
+
+discord:
+  token_env: TOKEN
+  guild_id: "1498581314495053834"
+  admin_role_ids:
+    - "1498593298393337969"
+  # An empty list preserves the existing command's ability to target any text channel.
+  manual_embed_channel_ids: []
+
+features:
+  manual_embed: true
+  role_selector: true
+  auto_reaction: true
+  exclusive_updates_reaction: true
+  daily_updates: true
+  community_metrics: true
+
+channels:
+  # The legacy Bot resolves this existing channel by name.
+  roles_name: "🔔roles"
+  exclusive_updates: "1501874966940094687"
+  daily_updates: "1501874966940094687"
+  staff_alerts: "1498591761940090991"
+
+role_selector:
+  title: Select Your Notifications
+  description: >-
+    Subscribe to the channels you want to follow.
+    Click once to subscribe - click again to unsubscribe.
+  adopt_custom_ids:
+    - subscription_role_select
+  options:
+    - label: "📢 Exclusive Updates"
+      role_name: "📢 Exclusive Updates"
+      description: Access our exclusive updates channel
+    - label: "🎉Lucky Drops"
+      role_name: "🎉Lucky Drops"
+      description: Access exclusive events and rewards
+
+auto_reactions:
+  - channel_id: "1501874966940094687"
+    mode: random
+    random_count: 10
+    emojis:
+      - "🎉"
+      - "🎊"
+      - "🔥"
+      - "💜"
+      - "✨"
+      - "🚀"
+      - "💰"
+      - "🎰"
+      - "👑"
+      - "🌟"
+      - "💎"
+      - "🙌"
+      - "😍"
+      - "🤩"
+      - "💪"
+      - "🎯"
+      - "⚡"
+      - "🏆"
+      - "🎁"
+      - "💫"
+    include_bot_messages: true
+
+feishu:
+  app_id_env: FEISHU_APP_ID
+  app_secret_env: FEISHU_APP_SECRET
+  updates_base_env: FEISHU_UPDATES_BASE_APP_TOKEN
+  updates_table_env: FEISHU_UPDATES_TABLE_ID
+  metrics_base_env: FEISHU_METRICS_BASE_APP_TOKEN
+  metrics_table_env: FEISHU_METRICS_TABLE_ID

@@ -8,19 +8,39 @@ from discord.ext import commands
 from app.core.runtime import ProjectRuntime
 
 
-def _option_by_role_id(runtime: ProjectRuntime, role_id: int):
+def _option_value(option) -> str:
+    if option.role_id is not None:
+        return str(option.role_id)
+    return f"name:{option.role_name}"
+
+
+def selector_custom_ids(runtime: ProjectRuntime) -> set[str]:
+    config = runtime.config.role_selector
+    if config is None:
+        return set()
+    return {f"roles:{runtime.config.slug}", *config.adopt_custom_ids}
+
+
+def _option_by_value(runtime: ProjectRuntime, selected: str):
     config = runtime.config.role_selector
     if config is None:
         return None
-    return next((option for option in config.options if option.role_id == role_id), None)
+    return next(
+        (
+            option
+            for option in config.options
+            if _option_value(option) == selected
+        ),
+        None,
+    )
 
 
 async def handle_selection(
     runtime: ProjectRuntime,
     interaction: discord.Interaction,
-    role_id: int,
+    selected: int | str,
 ) -> None:
-    option = _option_by_role_id(runtime, role_id)
+    option = _option_by_value(runtime, str(selected))
     if option is None:
         await interaction.followup.send(
             "This notification role is unavailable. Please contact an admin.",
@@ -28,10 +48,15 @@ async def handle_selection(
         )
         return
     guild = interaction.guild
-    role = guild.get_role(role_id) if guild else None
+    if option.role_id is not None:
+        role = guild.get_role(option.role_id) if guild else None
+        configured_target = f"id={option.role_id}"
+    else:
+        role = discord.utils.get(guild.roles, name=option.role_name) if guild else None
+        configured_target = f"name={option.role_name!r}"
     if role is None:
         print(
-            f"[{runtime.config.slug}][role_selector] configured role missing id={role_id}",
+            f"[{runtime.config.slug}][role_selector] configured role missing {configured_target}",
             flush=True,
         )
         await interaction.followup.send(
@@ -65,7 +90,7 @@ class RoleSelector(discord.ui.Select):
             options=[
                 discord.SelectOption(
                     label=option.label,
-                    value=str(option.role_id),
+                    value=_option_value(option),
                     description=option.description,
                 )
                 for option in config.options
@@ -75,7 +100,7 @@ class RoleSelector(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True, thinking=False)
-        await handle_selection(self.runtime, interaction, int(self.values[0]))
+        await handle_selection(self.runtime, interaction, self.values[0])
 
 
 class RoleSelectorView(discord.ui.View):
@@ -101,15 +126,20 @@ class RoleSelectorCog(commands.Cog):
 
     async def _channel(self) -> discord.TextChannel | None:
         channel_id = self.runtime.config.channels.roles
-        if channel_id is None:
+        if channel_id is not None:
+            channel = self.bot.get_channel(channel_id)
+            if channel is None:
+                try:
+                    channel = await self.bot.fetch_channel(channel_id)
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                    return None
+            return channel if isinstance(channel, discord.TextChannel) else None
+
+        channel_name = self.runtime.config.channels.roles_name
+        guild = self.bot.get_guild(self.runtime.config.discord.guild_id)
+        if channel_name is None or guild is None:
             return None
-        channel = self.bot.get_channel(channel_id)
-        if channel is None:
-            try:
-                channel = await self.bot.fetch_channel(channel_id)
-            except (discord.Forbidden, discord.NotFound, discord.HTTPException):
-                return None
-        return channel if isinstance(channel, discord.TextChannel) else None
+        return discord.utils.get(guild.text_channels, name=channel_name)
 
     async def ensure_message(self) -> None:
         channel = await self._channel()
@@ -119,10 +149,12 @@ class RoleSelectorCog(commands.Cog):
                 flush=True,
             )
             return
-        custom_id = f"roles:{self.runtime.config.slug}"
+        custom_ids = selector_custom_ids(self.runtime)
         existing: discord.Message | None = None
         async for message in channel.history(limit=100):
-            if message.author.id == self.bot.user.id and _message_has_custom_id(message, custom_id):
+            if message.author.id == self.bot.user.id and any(
+                _message_has_custom_id(message, custom_id) for custom_id in custom_ids
+            ):
                 existing = message
                 break
         config = self.runtime.config.role_selector

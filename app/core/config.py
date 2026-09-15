@@ -35,13 +35,15 @@ class ChannelConfig:
     exclusive_updates: int | None
     daily_updates: int | None
     staff_alerts: int | None
+    roles_name: str | None = None
 
 
 @dataclass(frozen=True)
 class RoleOption:
     label: str
-    role_id: int
+    role_id: int | None
     description: str
+    role_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,7 @@ class RoleSelectorConfig:
     title: str
     description: str
     options: tuple[RoleOption, ...]
+    adopt_custom_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -130,6 +133,13 @@ def _optional_id(mapping: Mapping[str, Any], key: str, path: str) -> int | None:
     return require_positive_id(value, f"{path}.{key}")
 
 
+def _optional_text(mapping: Mapping[str, Any], key: str, path: str) -> str | None:
+    value = mapping.get(key)
+    if value is None or value == "":
+        return None
+    return _text(value, f"{path}.{key}")
+
+
 def _id_list(value: object, path: str) -> tuple[int, ...]:
     if not isinstance(value, list):
         raise ConfigError(f"{path} must be a list")
@@ -170,28 +180,54 @@ def _parse_role_selector(raw: object) -> RoleSelectorConfig:
         raise ConfigError("role_selector.options must be a non-empty list")
     options: list[RoleOption] = []
     seen_role_ids: set[int] = set()
+    seen_role_names: set[str] = set()
     for index, item in enumerate(options_raw):
         option = _mapping(item, f"role_selector.options[{index}]")
-        role_id = require_positive_id(
-            option.get("role_id"), f"role_selector.options[{index}].role_id"
+        option_path = f"role_selector.options[{index}]"
+        raw_role_id = option.get("role_id")
+        role_id = (
+            require_positive_id(raw_role_id, f"{option_path}.role_id")
+            if raw_role_id is not None and raw_role_id != ""
+            else None
         )
-        if role_id in seen_role_ids:
-            raise ConfigError("role_selector.options contains a duplicate role_id")
-        seen_role_ids.add(role_id)
+        role_name = _optional_text(option, "role_name", option_path)
+        if (role_id is None) == (role_name is None):
+            raise ConfigError(f"{option_path} must set exactly one of role_id or role_name")
+        if role_id is not None:
+            if role_id in seen_role_ids:
+                raise ConfigError("role_selector.options contains a duplicate role_id")
+            seen_role_ids.add(role_id)
+        if role_name is not None:
+            normalized_name = role_name.casefold()
+            if normalized_name in seen_role_names:
+                raise ConfigError("role_selector.options contains a duplicate role_name")
+            seen_role_names.add(normalized_name)
         options.append(
             RoleOption(
-                label=_text(option.get("label"), f"role_selector.options[{index}].label"),
+                label=_text(option.get("label"), f"{option_path}.label"),
                 role_id=role_id,
                 description=_text(
                     option.get("description"),
-                    f"role_selector.options[{index}].description",
+                    f"{option_path}.description",
                 ),
+                role_name=role_name,
             )
         )
+    raw_adopt_custom_ids = section.get("adopt_custom_ids", [])
+    if not isinstance(raw_adopt_custom_ids, list):
+        raise ConfigError("role_selector.adopt_custom_ids must be a list")
+    adopt_custom_ids = tuple(
+        _text(value, "role_selector.adopt_custom_ids")
+        for value in raw_adopt_custom_ids
+    )
+    if len(set(adopt_custom_ids)) != len(adopt_custom_ids):
+        raise ConfigError("role_selector.adopt_custom_ids contains a duplicate custom ID")
+
     return RoleSelectorConfig(
         title=_text(section.get("title"), "role_selector.title"),
         description=str(section.get("description") or ""),
         options=tuple(options),
+        adopt_custom_ids=adopt_custom_ids,
     )
 
 
@@ -273,6 +309,7 @@ def _load_project(path: Path, expected_slug: str, environ: Mapping[str, str]) ->
         exclusive_updates=_optional_id(channels_raw, "exclusive_updates", "channels"),
         daily_updates=_optional_id(channels_raw, "daily_updates", "channels"),
         staff_alerts=_optional_id(channels_raw, "staff_alerts", "channels"),
+        roles_name=_optional_text(channels_raw, "roles_name", "channels"),
     )
     if features.role_selector and "role_selector" not in config:
         raise ConfigError("role_selector configuration is required")
@@ -281,8 +318,10 @@ def _load_project(path: Path, expected_slug: str, environ: Mapping[str, str]) ->
         if features.role_selector
         else None
     )
-    if features.role_selector and channels.roles is None:
-        raise ConfigError("channels.roles is required when role_selector is enabled")
+    if features.role_selector and channels.roles is None and channels.roles_name is None:
+        raise ConfigError(
+            "channels.roles or channels.roles_name is required when role_selector is enabled"
+        )
 
     reactions_enabled = features.auto_reaction or features.exclusive_updates_reaction
     auto_reactions = _parse_reactions(config.get("auto_reactions")) if reactions_enabled else ()
@@ -307,11 +346,6 @@ def _load_project(path: Path, expected_slug: str, environ: Mapping[str, str]) ->
     )
     if features.manual_embed and not discord_config.admin_role_ids:
         raise ConfigError("discord.admin_role_ids must not be empty when manual_embed is enabled")
-    if features.manual_embed and not discord_config.manual_embed_channel_ids:
-        raise ConfigError(
-            "discord.manual_embed_channel_ids must not be empty when manual_embed is enabled"
-        )
-
     return ProjectConfig(
         slug=slug,
         brand_name=_text(project.get("brand_name"), "project.brand_name"),

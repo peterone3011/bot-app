@@ -168,7 +168,7 @@ def require_positive_id(value: object, path: str) -> int:
     return parsed
 ```
 
-Require a token environment value for every project. Require `role_selector` and `channels.roles` only when `features.role_selector` is true. Require a non-empty `auto_reactions` list only when at least one reaction feature is true. Require all six Feishu environment references when either Feishu feature is true. Validate globally unique project slug, Guild ID and resolved Discord token. Do not log resolved secret values.
+Require a token environment value for every project. Require `role_selector` and either `channels.roles` or the FortunePurple compatibility field `channels.roles_name` when `features.role_selector` is true. Require a non-empty `auto_reactions` list only when at least one reaction feature is true. Require all six Feishu environment references when either Feishu feature is true. Validate globally unique project slug, Guild ID and resolved Discord token. Do not log resolved secret values.
 
 Create `projects/example.yaml` with the exact sections in the approved design document and only `<...>` identifiers as examples.
 
@@ -371,7 +371,7 @@ async def publish(
 ) -> None: ...
 ```
 
-Reject users whose roles do not intersect `admin_role_ids`. Reject channels outside `manual_embed_channel_ids`. Require button label and URL together, require an absolute `http` or `https` URL for image/button fields, and parse color as optional six-digit RGB hex. Send the final Embed to the target channel, then reply ephemerally with a permalink to the posted message. Use `allowed_mentions=discord.AllowedMentions.none()` for the command acknowledgement and never persist drafts.
+Reject users whose roles do not intersect `admin_role_ids`. When `manual_embed_channel_ids` is non-empty, reject channels outside it; an empty list explicitly permits any text channel for FortunePurple compatibility. Require button label and URL together, require an absolute `http` or `https` URL for image/button fields, and parse color as optional six-digit RGB hex. Send the final Embed to the target channel, then reply ephemerally with a permalink to the posted message. Use `allowed_mentions=discord.AllowedMentions.none()` for the command acknowledgement and never persist drafts.
 
 - [ ] **Step 4: Run embed tests**
 

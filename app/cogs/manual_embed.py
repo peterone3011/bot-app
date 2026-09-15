@@ -79,7 +79,8 @@ class ManualEmbedCog(commands.Cog):
                 "You are not allowed to use this command.", ephemeral=True
             )
             return
-        if channel.id not in self.runtime.config.discord.manual_embed_channel_ids:
+        allowed_channels = self.runtime.config.discord.manual_embed_channel_ids
+        if allowed_channels and channel.id not in allowed_channels:
             await interaction.response.send_message(
                 "That channel is not enabled for embed publishing.", ephemeral=True
             )

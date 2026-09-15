@@ -105,6 +105,23 @@ def test_load_projects_resolves_secret_references_and_ids(tmp_path: Path) -> Non
     assert config.feishu.metrics_table_id == "alpha-metrics-table"
 
 
+def test_load_projects_allows_legacy_name_based_role_selector(tmp_path: Path) -> None:
+    contents = (
+        project_yaml()
+        .replace('  roles: "606"', '  roles_name: "🔔roles"')
+        .replace('      role_id: "202"', '      role_name: "Updates"')
+    )
+    write_project(tmp_path, "alpha", contents)
+
+    [config] = load_projects(tmp_path, ["alpha"], secrets())
+
+    assert config.channels.roles is None
+    assert config.channels.roles_name == "🔔roles"
+    assert config.role_selector is not None
+    assert config.role_selector.options[0].role_id is None
+    assert config.role_selector.options[0].role_name == "Updates"
+
+
 def test_load_projects_rejects_duplicate_guild_ids(tmp_path: Path) -> None:
     write_project(tmp_path, "alpha", project_yaml(slug="alpha", guild_id="101"))
     write_project(
@@ -159,3 +176,27 @@ def test_enabled_project_slugs_rejects_empty_and_duplicate_values() -> None:
 
     with pytest.raises(ConfigError, match="contains a duplicate project slug"):
         enabled_project_slugs({"ENABLED_PROJECTS": "alpha, alpha"})
+
+
+def test_fortunepurple_config_preserves_the_existing_project_setup() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    environment = {
+        "TOKEN": "fortune-token",
+        "FEISHU_APP_ID": "feishu-app-id",
+        "FEISHU_APP_SECRET": "feishu-app-secret",
+        "FEISHU_UPDATES_BASE_APP_TOKEN": "updates-base",
+        "FEISHU_UPDATES_TABLE_ID": "updates-table",
+        "FEISHU_METRICS_BASE_APP_TOKEN": "metrics-base",
+        "FEISHU_METRICS_TABLE_ID": "metrics-table",
+    }
+
+    [config] = load_projects(repo_root, ["fortunepurple"], environment)
+
+    assert config.discord.guild_id == 1498581314495053834
+    assert config.discord.manual_embed_channel_ids == ()
+    assert config.channels.roles_name == "🔔roles"
+    assert config.channels.daily_updates == 1501874966940094687
+    assert config.role_selector is not None
+    assert config.role_selector.adopt_custom_ids == ("subscription_role_select",)
+    assert config.auto_reactions[0].mode == "random"
+    assert config.auto_reactions[0].random_count == 10

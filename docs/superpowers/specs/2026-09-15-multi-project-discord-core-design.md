@@ -165,6 +165,12 @@ Discord Bot 名称和头像由各自 Discord Developer Portal 的应用配置决
 
 新增项目的标准操作是：创建独立 Discord Bot，复制 `projects/example.yaml`，填写 Discord/飞书资源 ID，在 Railway 添加该项目密钥，然后将 slug 加入 `ENABLED_PROJECTS`。
 
+### FortunePurple 兼容迁移
+
+FortunePurple 是从旧单项目 Bot 迁入共享核心的首个项目。为保留其已在线运行的配置，角色选择器允许以现有 Discord 角色名和 `🔔roles` 频道名解析资源；运行时必须精确匹配，找不到时记录明确错误且不创建替代对象。新项目必须使用频道和角色 ID。
+
+FortunePurple 保留现有管理员身份组的 `/embed` 使用限制，但其空的频道白名单代表可发布到任意文字频道，与旧版行为一致。其 `exclusive-updates` 日常贴继续使用既有 20 个表情的池，并随机添加 10 个互不重复的 Reaction。
+
 ## 功能行为
 
 ### 手动 Embed

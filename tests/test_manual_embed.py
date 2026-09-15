@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -104,3 +105,25 @@ async def test_embed_command_sends_to_allowlisted_channel() -> None:
     call.edit_original_response.assert_awaited_once_with(
         content="Published: https://discord.com/channels/101/600/1"
     )
+
+
+@pytest.mark.asyncio
+async def test_embed_command_allows_any_channel_when_the_allowlist_is_empty() -> None:
+    active = runtime()
+    active = ProjectRuntime(
+        replace(
+            active.config,
+            discord=replace(active.config.discord, manual_embed_channel_ids=()),
+        ),
+        active.bot,
+        active.state,
+        active.feishu,
+    )
+    cog = ManualEmbedCog(active)
+    call = interaction((500,))
+    message = SimpleNamespace(jump_url="https://discord.com/channels/101/601/1")
+    channel = SimpleNamespace(id=601, send=AsyncMock(return_value=message))
+
+    await cog.publish.callback(cog, call, channel, "Title", "Body", None, None, None, None)
+
+    channel.send.assert_awaited_once()

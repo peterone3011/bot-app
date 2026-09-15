@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from app.cogs.role_selector import RoleSelectorView, handle_selection
+from app.cogs.role_selector import RoleSelectorView, handle_selection, selector_custom_ids
 from app.core.config import (
     ChannelConfig,
     DiscordConfig,
@@ -44,6 +45,48 @@ def test_persistent_selector_uses_a_project_scoped_custom_id() -> None:
     assert view.children[0].options[0].value == "700"
 
 
+def test_selector_uses_a_name_value_for_legacy_role_configuration() -> None:
+    active = runtime()
+    active = ProjectRuntime(
+        replace(
+            active.config,
+            channels=replace(active.config.channels, roles=None, roles_name="🔔roles"),
+            role_selector=RoleSelectorConfig(
+                title="Choose roles",
+                description="Subscribe to alerts.",
+                options=(RoleOption("Updates", None, "Product news", role_name="Updates"),),
+            ),
+        ),
+        active.bot,
+        active.state,
+        active.feishu,
+    )
+
+    view = RoleSelectorView(active)
+
+    assert view.children[0].options[0].value == "name:Updates"
+
+
+def test_selector_adopts_only_the_configured_legacy_component_ids() -> None:
+    active = runtime()
+    active = ProjectRuntime(
+        replace(
+            active.config,
+            role_selector=RoleSelectorConfig(
+                title="Choose roles",
+                description="Subscribe to alerts.",
+                options=(RoleOption("Updates", 700, "Product news"),),
+                adopt_custom_ids=("legacy-role-select",),
+            ),
+        ),
+        active.bot,
+        active.state,
+        active.feishu,
+    )
+
+    assert selector_custom_ids(active) == {"roles:alpha", "legacy-role-select"}
+
+
 @pytest.mark.asyncio
 async def test_existing_role_is_removed() -> None:
     selected_role = SimpleNamespace(id=700, name="Updates")
@@ -77,3 +120,32 @@ async def test_missing_configured_role_returns_private_error() -> None:
         "This notification role is unavailable. Please contact an admin.",
         ephemeral=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_legacy_named_role_is_resolved_before_subscription() -> None:
+    active = runtime()
+    active = ProjectRuntime(
+        replace(
+            active.config,
+            role_selector=RoleSelectorConfig(
+                title="Choose roles",
+                description="Subscribe to alerts.",
+                options=(RoleOption("Updates", None, "Product news", role_name="Updates"),),
+            ),
+        ),
+        active.bot,
+        active.state,
+        active.feishu,
+    )
+    selected_role = SimpleNamespace(id=700, name="Updates")
+    member = SimpleNamespace(roles=[], remove_roles=AsyncMock(), add_roles=AsyncMock())
+    interaction = SimpleNamespace(
+        user=member,
+        guild=SimpleNamespace(roles=[selected_role]),
+        followup=SimpleNamespace(send=AsyncMock()),
+    )
+
+    await handle_selection(active, interaction, "name:Updates")
+
+    member.add_roles.assert_awaited_once_with(selected_role, reason="notification role opt-in")

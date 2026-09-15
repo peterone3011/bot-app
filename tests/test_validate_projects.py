@@ -1,8 +1,25 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import sys
 
 from scripts import validate_projects
+
+
+def test_preflight_script_runs_directly_from_the_repository_root() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+
+    result = subprocess.run(
+        [sys.executable, "scripts/validate_projects.py", "--help"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "Validate project configuration" in result.stdout
 
 
 def test_preflight_validates_without_starting_discord_or_feishu(tmp_path: Path, capsys) -> None:

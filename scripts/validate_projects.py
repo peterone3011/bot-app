@@ -3,7 +3,12 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import sys
 from typing import Mapping, Sequence
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from app.core.config import ConfigError, enabled_project_slugs, load_projects
 
@@ -29,7 +34,7 @@ def main(
     )
     args = parser.parse_args(argv)
     values = os.environ if environ is None else environ
-    root = repo_root or Path(__file__).resolve().parents[1]
+    root = repo_root or REPO_ROOT
     try:
         slugs = (
             tuple(item.strip() for item in args.projects.split(",") if item.strip())
