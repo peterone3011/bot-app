@@ -14,6 +14,13 @@ from app.core.config import (
 from app import runner
 
 
+def test_production_entrypoint_delegates_to_the_shared_runner() -> None:
+    source = (Path(__file__).resolve().parents[1] / "bot.py").read_text(encoding="utf-8")
+
+    assert "from app.runner import main" in source
+    assert 'if __name__ == "__main__":' in source
+
+
 def config(slug: str, guild_id: int) -> ProjectConfig:
     return ProjectConfig(
         slug=slug,
