@@ -1,7 +1,10 @@
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 import pytest
 import cogs.embed as eb
+from app.cogs import embed_builder as shared_eb
+from app.core.embed_store import EmbedMessageStore
 
 
 # ---------------------------------------------------------------------------
@@ -267,3 +270,42 @@ def test_draft_from_message_no_button():
     draft = eb.draft_from_message(_MsgNoBtn())
     assert draft["button_label"] is None
     assert draft["button_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_shared_builder_reads_only_the_store_bound_to_its_bot(tmp_path: Path):
+    alpha_bot = object()
+    beta_bot = object()
+    alpha_store = EmbedMessageStore(tmp_path / "alpha" / "embed-messages.json")
+    beta_store = EmbedMessageStore(tmp_path / "beta" / "embed-messages.json")
+    await alpha_store.ensure_initialized()
+    await beta_store.ensure_initialized()
+    await alpha_store.upsert({"id": "alpha-draft", "status": "draft"})
+    shared_eb._STORES_BY_BOT[id(alpha_bot)] = alpha_store
+    shared_eb._STORES_BY_BOT[id(beta_bot)] = beta_store
+
+    try:
+        assert [row["id"] for row in await shared_eb._messages_for_bot(alpha_bot)] == [
+            "alpha-draft"
+        ]
+        assert await shared_eb._messages_for_bot(beta_bot) == []
+    finally:
+        shared_eb._STORES_BY_BOT.pop(id(alpha_bot), None)
+        shared_eb._STORES_BY_BOT.pop(id(beta_bot), None)
+
+
+@pytest.mark.asyncio
+async def test_shared_builder_persists_a_registered_draft_to_its_store(tmp_path: Path):
+    bot = object()
+    store = EmbedMessageStore(tmp_path / "alpha" / "embed-messages.json")
+    await store.ensure_initialized()
+    draft = shared_eb.new_draft(123)
+    shared_eb._STORES_BY_BOT[id(bot)] = store
+    shared_eb._register_messages(store, [draft])
+
+    try:
+        await shared_eb.aupsert_message(draft)
+        assert (await store.get(draft["id"]))["channel_id"] == 123
+    finally:
+        shared_eb._STORES_BY_BOT.pop(id(bot), None)
+        shared_eb._STORES_BY_MESSAGE_ID.pop(draft["id"], None)

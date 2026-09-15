@@ -131,11 +131,11 @@ async def test_embed_command_allows_any_channel_when_the_allowlist_is_empty() ->
 
 
 @pytest.mark.asyncio
-async def test_install_restores_the_interactive_embed_builder(monkeypatch) -> None:
-    legacy_setup = AsyncMock()
-    monkeypatch.setattr(manual_embed, "install_interactive_embed_builder", legacy_setup)
+async def test_install_uses_the_project_scoped_embed_builder(monkeypatch) -> None:
+    shared_install = AsyncMock()
+    monkeypatch.setattr(manual_embed, "install_shared_embed_builder", shared_install)
     active = runtime()
 
     await manual_embed.install(active)
 
-    legacy_setup.assert_awaited_once_with(active.bot)
+    shared_install.assert_awaited_once_with(active)
