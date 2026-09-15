@@ -36,9 +36,14 @@ def runtime(*, exclusive_enabled: bool = True, include_bots: bool = True) -> Pro
     return ProjectRuntime(config, SimpleNamespace(), ProjectState(Path("/tmp"), "alpha"), None)
 
 
-def message(*, channel_id: int, is_bot: bool = False) -> SimpleNamespace:
+def message(
+    *,
+    channel_id: int,
+    guild_id: int = 101,
+    is_bot: bool = False,
+) -> SimpleNamespace:
     return SimpleNamespace(
-        guild=SimpleNamespace(id=101),
+        guild=SimpleNamespace(id=guild_id),
         channel=SimpleNamespace(id=channel_id),
         author=SimpleNamespace(bot=is_bot),
         add_reaction=AsyncMock(),
@@ -68,6 +73,15 @@ async def test_exclusive_updates_rule_can_be_disabled_independently() -> None:
     incoming = message(channel_id=800)
 
     await AutoReactionCog(runtime(exclusive_enabled=False)).on_message(incoming)
+
+    incoming.add_reaction.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ignores_messages_from_another_guild() -> None:
+    incoming = message(channel_id=700, guild_id=999)
+
+    await AutoReactionCog(runtime()).on_message(incoming)
 
     incoming.add_reaction.assert_not_awaited()
 

@@ -33,7 +33,7 @@ def runtime(tmp_path: Path) -> ProjectRuntime:
         auto_reactions=(),
         feishu=FeishuConfig("id", "secret", "updates-base", "updates-table", "metrics-base", "metrics-table"),
     )
-    bot = SimpleNamespace(guilds=[SimpleNamespace(member_count=540, members=[])])
+    bot = SimpleNamespace(guilds=[SimpleNamespace(id=101, member_count=540, members=[])])
     client = SimpleNamespace(upsert_record_by_text_field=AsyncMock(return_value="created"))
     return ProjectRuntime(config, bot, ProjectState(tmp_path, "alpha"), client)
 
@@ -84,3 +84,33 @@ async def test_failed_rollup_is_retained_in_its_project_pending_file(tmp_path: P
     assert active_runtime.state.pending_rollups_file.exists()
     assert "2026/09/15" in active_runtime.state.pending_rollups_file.read_text(encoding="utf-8")
     assert not (tmp_path / "beta" / "pending-rollups.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_member_events_from_another_guild_are_ignored() -> None:
+    cog = CommunityMetricsCog(runtime(Path("/tmp")))
+    cog.record_event = AsyncMock()
+    member = SimpleNamespace(bot=False, id=123, guild=SimpleNamespace(id=999))
+
+    await cog.on_member_join(member)
+    await cog.on_member_remove(member)
+
+    cog.record_event.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rollup_uses_its_configured_guild_not_the_first_guild() -> None:
+    active_runtime = runtime(Path("/tmp"))
+    active_runtime.bot.guilds = [
+        SimpleNamespace(id=999, member_count=999, members=[]),
+        SimpleNamespace(id=101, member_count=540, members=[]),
+    ]
+
+    cog = CommunityMetricsCog(active_runtime)
+    cog._queue_pending = AsyncMock()
+    cog._remove_pending = AsyncMock()
+
+    await cog.write_daily(date(2026, 9, 15))
+
+    fields = active_runtime.feishu.upsert_record_by_text_field.await_args.args[-1]
+    assert fields["当前总人数"] == 540

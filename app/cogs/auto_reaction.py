@@ -30,7 +30,10 @@ class AutoReactionCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
-        if message.guild is None:
+        if (
+            message.guild is None
+            or message.guild.id != self.runtime.config.discord.guild_id
+        ):
             return
         rules = [
             rule

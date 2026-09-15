@@ -159,12 +159,18 @@ class CommunityMetricsCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
-        if not member.bot:
+        if (
+            not member.bot
+            and member.guild.id == self.runtime.config.discord.guild_id
+        ):
             await self.record_event("join", member_id=member.id)
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
-        if not member.bot:
+        if (
+            not member.bot
+            and member.guild.id == self.runtime.config.discord.guild_id
+        ):
             await self.record_event("leave", member_id=member.id)
 
     @tasks.loop(time=[ROLLUP_TIME_UTC])
@@ -177,7 +183,14 @@ class CommunityMetricsCog(commands.Cog):
 
     async def write_daily(self, day: date) -> None:
         await self.flush_pending()
-        guild = self.bot.guilds[0] if self.bot.guilds else None
+        guild = next(
+            (
+                item
+                for item in self.bot.guilds
+                if item.id == self.runtime.config.discord.guild_id
+            ),
+            None,
+        )
         if guild is None:
             self._log("no guild available for daily rollup")
             return
