@@ -214,6 +214,19 @@ class FeishuClient:
             payload={"fields": fields},
         )
 
+    async def download_file(self, url: str) -> bytes:
+        token = await self._tenant_token()
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=30)
+        ) as session:
+            async with session.get(
+                url,
+                headers={"Authorization": f"Bearer {token}"},
+            ) as response:
+                if response.status != 200:
+                    raise FeishuApiError(f"Feishu attachment download HTTP {response.status}")
+                return await response.read()
+
     async def upsert_record_by_text_field(
         self,
         app_token: str,
