@@ -276,18 +276,26 @@ def _load_project(path: Path, expected_slug: str, environ: Mapping[str, str]) ->
     if features.daily_updates and channels.daily_updates is None:
         raise ConfigError("channels.daily_updates is required when daily_updates is enabled")
 
+    discord_config = DiscordConfig(
+        token=_resolve_secret(environ, discord.get("token_env")),
+        guild_id=require_positive_id(discord.get("guild_id"), "discord.guild_id"),
+        admin_role_ids=_id_list(discord.get("admin_role_ids", []), "discord.admin_role_ids"),
+        manual_embed_channel_ids=_id_list(
+            discord.get("manual_embed_channel_ids", []),
+            "discord.manual_embed_channel_ids",
+        ),
+    )
+    if features.manual_embed and not discord_config.admin_role_ids:
+        raise ConfigError("discord.admin_role_ids must not be empty when manual_embed is enabled")
+    if features.manual_embed and not discord_config.manual_embed_channel_ids:
+        raise ConfigError(
+            "discord.manual_embed_channel_ids must not be empty when manual_embed is enabled"
+        )
+
     return ProjectConfig(
         slug=slug,
         brand_name=_text(project.get("brand_name"), "project.brand_name"),
-        discord=DiscordConfig(
-            token=_resolve_secret(environ, discord.get("token_env")),
-            guild_id=require_positive_id(discord.get("guild_id"), "discord.guild_id"),
-            admin_role_ids=_id_list(discord.get("admin_role_ids", []), "discord.admin_role_ids"),
-            manual_embed_channel_ids=_id_list(
-                discord.get("manual_embed_channel_ids", []),
-                "discord.manual_embed_channel_ids",
-            ),
-        ),
+        discord=discord_config,
         features=features,
         channels=channels,
         role_selector=role_selector,

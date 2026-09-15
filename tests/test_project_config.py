@@ -142,6 +142,17 @@ def test_load_projects_rejects_missing_secret_value(tmp_path: Path) -> None:
         load_projects(tmp_path, ["alpha"], environment)
 
 
+def test_load_projects_requires_embed_admin_and_channel_allowlist(tmp_path: Path) -> None:
+    write_project(
+        tmp_path,
+        "alpha",
+        project_yaml().replace('  admin_role_ids: ["404"]', "  admin_role_ids: []"),
+    )
+
+    with pytest.raises(ConfigError, match="admin_role_ids must not be empty"):
+        load_projects(tmp_path, ["alpha"], secrets())
+
+
 def test_enabled_project_slugs_rejects_empty_and_duplicate_values() -> None:
     with pytest.raises(ConfigError, match="must name at least one project"):
         enabled_project_slugs({})
