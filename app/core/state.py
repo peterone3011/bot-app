@@ -23,5 +23,9 @@ class ProjectState:
     def pending_rollups_file(self) -> Path:
         return self.directory / "pending-rollups.json"
 
+    @property
+    def embed_messages_file(self) -> Path:
+        return self.directory / "embed-messages.json"
+
     def ensure_directory(self) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)

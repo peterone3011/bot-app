@@ -9,8 +9,10 @@ def test_project_state_paths_are_isolated_by_slug(tmp_path: Path) -> None:
 
     assert alpha.events_file == tmp_path / "alpha" / "community-events.jsonl"
     assert alpha.pending_rollups_file == tmp_path / "alpha" / "pending-rollups.json"
+    assert alpha.embed_messages_file == tmp_path / "alpha" / "embed-messages.json"
     assert alpha.events_file != beta.events_file
     assert alpha.pending_rollups_file != beta.pending_rollups_file
+    assert alpha.embed_messages_file != beta.embed_messages_file
 
 
 def test_project_state_creates_only_its_own_directory(tmp_path: Path) -> None:
