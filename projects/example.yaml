@@ -1,0 +1,47 @@
+project:
+  slug: example
+  brand_name: Example Brand
+
+discord:
+  token_env: DISCORD_TOKEN_EXAMPLE
+  guild_id: "<GUILD_ID>"
+  admin_role_ids:
+    - "<ADMIN_ROLE_ID>"
+  manual_embed_channel_ids:
+    - "<EMBED_CHANNEL_ID>"
+
+features:
+  manual_embed: true
+  role_selector: true
+  auto_reaction: true
+  exclusive_updates_reaction: true
+  daily_updates: true
+  community_metrics: true
+
+channels:
+  roles: "<ROLES_CHANNEL_ID>"
+  exclusive_updates: "<EXCLUSIVE_UPDATES_CHANNEL_ID>"
+  daily_updates: "<DAILY_UPDATES_CHANNEL_ID>"
+  staff_alerts: "<STAFF_ALERTS_CHANNEL_ID>"
+
+role_selector:
+  title: Select Your Notifications
+  description: Choose the updates you would like to receive.
+  options:
+    - label: Exclusive Updates
+      role_id: "<EXCLUSIVE_UPDATES_ROLE_ID>"
+      description: Get product updates.
+
+auto_reactions:
+  - channel_id: "<REACTION_CHANNEL_ID>"
+    emojis:
+      - "🔥"
+    include_bot_messages: true
+
+feishu:
+  app_id_env: FEISHU_EXAMPLE_APP_ID
+  app_secret_env: FEISHU_EXAMPLE_APP_SECRET
+  updates_base_env: FEISHU_EXAMPLE_UPDATES_BASE
+  updates_table_env: FEISHU_EXAMPLE_UPDATES_TABLE
+  metrics_base_env: FEISHU_EXAMPLE_METRICS_BASE
+  metrics_table_env: FEISHU_EXAMPLE_METRICS_TABLE
