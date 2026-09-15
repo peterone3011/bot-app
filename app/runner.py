@@ -11,7 +11,9 @@ from discord.ext import commands
 
 from app.cogs import auto_reaction, community_metrics, daily_updates, manual_embed, role_selector
 from app.core.config import ProjectConfig, enabled_project_slugs, load_projects
+from app.core.embed_store import EmbedMessageStore
 from app.core.feishu import FeishuClient
+from app.core.legacy_embed_import import import_fortunepurple_embed_messages
 from app.core.runtime import ProjectRuntime
 from app.core.state import ProjectState
 
@@ -38,6 +40,18 @@ def _make_feishu_client(config: ProjectConfig) -> FeishuClient | None:
     if config.feishu is None:
         return None
     return FeishuClient(config.feishu.app_id, config.feishu.app_secret)
+
+
+async def build_embed_store(runtime: ProjectRuntime) -> EmbedMessageStore:
+    store = EmbedMessageStore(runtime.state.embed_messages_file)
+    importer = (
+        import_fortunepurple_embed_messages
+        if runtime.config.slug == "fortunepurple"
+        else None
+    )
+    await store.ensure_initialized(importer)
+    runtime.embed_store = store
+    return store
 
 
 async def sync_project_commands(bot: commands.Bot, config: ProjectConfig) -> None:
@@ -110,6 +124,7 @@ async def run_project(config: ProjectConfig, root: Path) -> None:
             feishu=_make_feishu_client(config),
         )
         try:
+            await build_embed_store(runtime)
             await install_enabled_cogs(runtime)
             await bot.start(config.discord.token)
         except asyncio.CancelledError:

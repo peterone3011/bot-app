@@ -12,6 +12,8 @@ from app.core.config import (
     ProjectConfig,
 )
 from app import runner
+from app.core.runtime import ProjectRuntime
+from app.core.state import ProjectState
 
 
 def test_production_entrypoint_delegates_to_the_shared_runner() -> None:
@@ -120,3 +122,37 @@ async def test_registry_loads_auto_reaction_once_when_both_reaction_flags_are_en
         "daily_updates",
         "community_metrics",
     ]
+
+
+@pytest.mark.asyncio
+async def test_build_embed_store_isolates_each_project_path(tmp_path: Path) -> None:
+    alpha = ProjectRuntime(config("alpha", 101), Mock(), ProjectState(tmp_path, "alpha"), None)
+    beta = ProjectRuntime(config("beta", 202), Mock(), ProjectState(tmp_path, "beta"), None)
+
+    alpha_store = await runner.build_embed_store(alpha)
+    beta_store = await runner.build_embed_store(beta)
+
+    assert alpha_store.path == tmp_path / "alpha" / "embed-messages.json"
+    assert beta_store.path == tmp_path / "beta" / "embed-messages.json"
+    assert alpha_store.path != beta_store.path
+    assert alpha.embed_store is alpha_store
+    assert beta.embed_store is beta_store
+
+
+@pytest.mark.asyncio
+async def test_build_embed_store_imports_legacy_records_only_for_fortunepurple(
+    monkeypatch, tmp_path: Path
+) -> None:
+    importer = AsyncMock(return_value=[{"id": "legacy", "status": "draft"}])
+    monkeypatch.setattr(runner, "import_fortunepurple_embed_messages", importer)
+    alpha = ProjectRuntime(config("alpha", 101), Mock(), ProjectState(tmp_path, "alpha"), None)
+    fp = ProjectRuntime(
+        config("fortunepurple", 202), Mock(), ProjectState(tmp_path, "fortunepurple"), None
+    )
+
+    await runner.build_embed_store(alpha)
+    await runner.build_embed_store(fp)
+
+    importer.assert_awaited_once()
+    assert await alpha.embed_store.list() == []
+    assert await fp.embed_store.get("legacy") == {"id": "legacy", "status": "draft"}
