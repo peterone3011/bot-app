@@ -16,6 +16,12 @@ directory:
 The file contains only that project's draft, scheduled, and published Embed
 records. All reads and writes go through a project-scoped repository object.
 
+Railway is already the Bot runtime and already has a persistent volume. Embed
+records are small text payloads, so using the volume avoids database setup for
+every future Bot while adding only negligible storage consumption. This change
+replaces only the legacy Embed-builder use of Supabase; it does not move the
+Feishu workflows or migrate retired Big Win, activity, or dashboard data.
+
 ## Scope
 
 - Preserve the current `/embed`, `/edit-embed`, and message-context `Edit
@@ -28,6 +34,8 @@ records. All reads and writes go through a project-scoped repository object.
 - Stop normal Embed-builder reads and writes to Supabase after the migration.
 - Do not migrate Big Win, activity, dashboard, role, or community-metrics
   data.
+- Do not add a database, a per-project database secret, or a new paid service
+  for future projects.
 
 ## Storage Contract
 
