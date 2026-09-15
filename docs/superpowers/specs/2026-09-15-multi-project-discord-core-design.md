@@ -134,7 +134,9 @@ role_selector:
 
 auto_reactions:
   - channel_id: "<CHANNEL_ID>"
-    emojis: ["👍"]
+    mode: random
+    random_count: 10
+    emojis: ["👍", "🎉", "🔥", "💜", "✨", "🚀", "💎", "🏆", "🎁", "💫"]
     include_bot_messages: true
 
 feishu:
@@ -175,7 +177,7 @@ Cog 在项目的 `roles` 频道维护一个持久下拉框。选项、目标 Rol
 
 ### 自动 Reaction
 
-每条规则包含频道 ID、一个或多个 Emoji、启用状态和 `include_bot_messages`。规则默认可对 Bot 自己发布的消息生效，因此发布到 `exclusive-updates` 的日常贴也能获得所需 Reaction。`exclusive-updates` 规则有自己的功能开关。
+每条规则包含频道 ID、一个或多个 Emoji、启用状态和 `include_bot_messages`。`mode: fixed` 按配置顺序添加全部 Emoji；`mode: random` 从无重复 Emoji 池中随机选择 `random_count` 个。规则默认可对 Bot 自己发布的消息生效，因此发布到 `exclusive-updates` 的日常贴也能获得所需 Reaction。`exclusive-updates` 规则有自己的功能开关。
 
 ### 日常贴
 

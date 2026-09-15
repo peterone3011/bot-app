@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import random
+
 import discord
 from discord.ext import commands
 
@@ -20,6 +22,12 @@ class AutoReactionCog(commands.Cog):
             return self.runtime.config.features.exclusive_updates_reaction
         return self.runtime.config.features.auto_reaction
 
+    @staticmethod
+    def _emojis_for(rule: ReactionRule) -> tuple[str, ...]:
+        if rule.mode == "random":
+            return tuple(random.sample(rule.emojis, rule.random_count or 0))
+        return rule.emojis
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         if message.guild is None:
@@ -31,7 +39,7 @@ class AutoReactionCog(commands.Cog):
             and (not message.author.bot or rule.include_bot_messages)
         ]
         for rule in rules:
-            for emoji in rule.emojis:
+            for emoji in self._emojis_for(rule):
                 try:
                     await message.add_reaction(emoji)
                 except (discord.Forbidden, discord.HTTPException, TypeError, ValueError) as exc:

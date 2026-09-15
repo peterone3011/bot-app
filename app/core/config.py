@@ -56,6 +56,8 @@ class ReactionRule:
     channel_id: int
     emojis: tuple[str, ...]
     include_bot_messages: bool
+    mode: str = "fixed"
+    random_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -203,6 +205,22 @@ def _parse_reactions(raw: object) -> tuple[ReactionRule, ...]:
         if not isinstance(emojis, list) or not emojis:
             raise ConfigError(f"auto_reactions[{index}].emojis must be a non-empty list")
         parsed_emojis = tuple(_text(emoji, f"auto_reactions[{index}].emojis") for emoji in emojis)
+        if len(set(parsed_emojis)) != len(parsed_emojis):
+            raise ConfigError(f"auto_reactions[{index}].emojis contains a duplicate emoji")
+        mode = str(rule.get("mode", "fixed")).strip().lower()
+        if mode not in {"fixed", "random"}:
+            raise ConfigError(f"auto_reactions[{index}].mode must be fixed or random")
+        random_count: int | None = None
+        if mode == "random":
+            raw_count = rule.get("random_count")
+            if not isinstance(raw_count, int) or isinstance(raw_count, bool):
+                raise ConfigError(f"auto_reactions[{index}].random_count must be an integer")
+            if raw_count < 1 or raw_count > len(parsed_emojis):
+                raise ConfigError(
+                    f"auto_reactions[{index}].random_count must be between 1 and "
+                    f"{len(parsed_emojis)}"
+                )
+            random_count = raw_count
         rules.append(
             ReactionRule(
                 channel_id=require_positive_id(
@@ -213,6 +231,8 @@ def _parse_reactions(raw: object) -> tuple[ReactionRule, ...]:
                     rule.get("include_bot_messages", False),
                     f"auto_reactions[{index}].include_bot_messages",
                 ),
+                mode=mode,
+                random_count=random_count,
             )
         )
     return tuple(rules)

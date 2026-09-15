@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -69,3 +70,33 @@ async def test_exclusive_updates_rule_can_be_disabled_independently() -> None:
     await AutoReactionCog(runtime(exclusive_enabled=False)).on_message(incoming)
 
     incoming.add_reaction.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_random_rule_chooses_configured_number_without_duplicates(monkeypatch) -> None:
+    active = runtime()
+    active = ProjectRuntime(
+        replace(
+            active.config,
+            auto_reactions=(
+                ReactionRule(
+                    700,
+                    ("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"),
+                    True,
+                    mode="random",
+                    random_count=10,
+                ),
+            ),
+        ),
+        active.bot,
+        active.state,
+        active.feishu,
+    )
+    incoming = message(channel_id=700)
+    monkeypatch.setattr("app.cogs.auto_reaction.random.sample", lambda pool, count: list(pool)[1:11])
+
+    await AutoReactionCog(active).on_message(incoming)
+
+    assert [call.args[0] for call in incoming.add_reaction.await_args_list] == [
+        "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"
+    ]

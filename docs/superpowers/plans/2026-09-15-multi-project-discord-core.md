@@ -255,7 +255,6 @@ git commit -m "feat: add project scoped feishu services"
 - Create: `app/core/runtime.py`
 - Create: `app/runner.py`
 - Test: `tests/test_runner.py`
-- Modify: `bot.py`
 
 **Consumes:** `ProjectConfig`, `ProjectState`, `FeishuClient`, and the five Cog `install(runtime)` factories introduced in later tasks.
 
@@ -309,16 +308,7 @@ async def run_project(config: ProjectConfig, state_root: Path) -> None:
 
 `on_ready` must call `bot.tree.copy_global_to(guild=discord.Object(id=config.discord.guild_id))`, then `await bot.tree.sync(guild=...)`, and log the project, logged-in user, Guild and enabled feature names. `run_enabled_projects` must use `asyncio.gather` with one `run_project` task per valid project so a reconnect loop remains local to that project.
 
-Replace `bot.py` with:
-
-```python
-from app.runner import main
-
-if __name__ == "__main__":
-    main()
-```
-
-Do not change `Procfile`; it remains `worker: python bot.py`.
+Do not modify `bot.py` or `Procfile` in this task. The current production entrypoint remains intact until all shared Cogs, the real FortunePurple configuration and preflight verification have been completed and the administrator explicitly approves the Railway cutover.
 
 - [ ] **Step 4: Run runner tests**
 
@@ -328,7 +318,7 @@ Expected: PASS for one-Bot-per-project creation, Guild-limited sync, per-project
 - [ ] **Step 5: Commit the runner**
 
 ```bash
-git add app/core/runtime.py app/runner.py bot.py tests/test_runner.py
+git add app/core/runtime.py app/runner.py tests/test_runner.py
 git commit -m "feat: add multi project bot runner"
 ```
 
@@ -688,7 +678,9 @@ Expected: `Procfile` remains `worker: python bot.py`; only the new runner replac
 
 Set `ENABLED_PROJECTS=fortunepurple`, `DISCORD_TOKEN_FORTUNEPURPLE`, and every `FEISHU_FP_*` secret referenced by `projects/fortunepurple.yaml`. Compare each value against the live legacy variable before saving. Do not deploy until all configuration names pass `validate_projects.py` in an equivalent local redacted environment.
 
-- [ ] **Step 4: Deploy once and watch the startup contract**
+- [ ] **Step 4: After explicit administrator approval, switch the entrypoint and deploy once**
+
+Replace `bot.py` with the small `app.runner.main` entrypoint in the approved production commit. Keep `Procfile` as `worker: python bot.py`. No Railway deployment, service restart or production Bot change may happen before this explicit approval.
 
 Deploy the committed revision to the existing Railway Bot service. Confirm exactly one FortunePurple login line, its configured Guild sync line, the five expected Cog registration lines, and no legacy Cog load line. Confirm there is no second login using the same token.
 
