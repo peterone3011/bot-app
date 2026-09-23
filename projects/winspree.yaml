@@ -1,0 +1,71 @@
+project:
+  slug: winspree
+  brand_name: WinSpree
+
+discord:
+  token_env: DISCORD_TOKEN_WINSPREE
+  guild_id: "1552153759474393088"
+  admin_role_ids:
+    - "1552153759474393092"
+  manual_embed_channel_ids: []
+
+features:
+  manual_embed: true
+  role_selector: true
+  auto_reaction: true
+  exclusive_updates_reaction: true
+  daily_updates: true
+  community_metrics: true
+
+channels:
+  roles: "1552153759914926104"
+  exclusive_updates: "1552153759914926108"
+  daily_updates: "1552153759914926108"
+
+role_selector:
+  title: Select Your Notifications
+  description: >-
+    Subscribe to the channels you want to follow.
+    Click once to subscribe - click again to unsubscribe.
+  options:
+    - label: "📢 Exclusive Updates"
+      role_name: "📢 Exclusive Updates"
+      description: Access our exclusive updates channel
+    - label: "🎉Lucky Drops"
+      role_name: "🎉Lucky Drops"
+      description: Access exclusive events and rewards
+
+auto_reactions:
+  - channel_id: "1552153759914926108"
+    mode: random
+    random_count: 10
+    emojis:
+      - "🎉"
+      - "🎊"
+      - "🔥"
+      - "💜"
+      - "✨"
+      - "🚀"
+      - "💰"
+      - "🎰"
+      - "👑"
+      - "🌟"
+      - "💎"
+      - "🙌"
+      - "😍"
+      - "🤩"
+      - "💪"
+      - "🎯"
+      - "⚡"
+      - "🏆"
+      - "🎁"
+      - "💫"
+    include_bot_messages: true
+
+feishu:
+  app_id_env: FEISHU_APP_ID
+  app_secret_env: FEISHU_APP_SECRET
+  updates_base_env: FEISHU_WINSPREE_UPDATES_BASE_APP_TOKEN
+  updates_table_env: FEISHU_WINSPREE_UPDATES_TABLE_ID
+  metrics_base_env: FEISHU_WINSPREE_METRICS_BASE_APP_TOKEN
+  metrics_table_env: FEISHU_WINSPREE_METRICS_TABLE_ID
