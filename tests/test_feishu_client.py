@@ -35,6 +35,28 @@ async def test_list_records_reuses_tenant_token_and_paginates() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_records_treats_an_empty_response_without_items_as_no_records() -> None:
+    async def transport(
+        method: str,
+        path: str,
+        *,
+        params: dict[str, str] | None = None,
+        payload: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> HttpResponse:
+        if path == "/auth/v3/tenant_access_token/internal":
+            return HttpResponse(
+                200,
+                {"code": 0, "tenant_access_token": "tenant", "expire": 3600},
+            )
+        return HttpResponse(200, {"code": 0, "data": {"has_more": False, "total": 0}})
+
+    client = FeishuClient("app-id", "app-secret", transport=transport)
+
+    assert await client.list_records("base", "table") == []
+
+
+@pytest.mark.asyncio
 async def test_upsert_rejects_duplicate_text_keys_before_writing() -> None:
     methods: list[str] = []
 

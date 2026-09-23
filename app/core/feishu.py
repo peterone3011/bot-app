@@ -177,7 +177,7 @@ class FeishuClient:
             data = body.get("data")
             if not isinstance(data, dict):
                 raise FeishuApiError("Feishu list records response missing data")
-            items = data.get("items")
+            items = data.get("items", [])
             if not isinstance(items, list):
                 raise FeishuApiError("Feishu list records response missing items")
             records.extend(item for item in items if isinstance(item, dict))
